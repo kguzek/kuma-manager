@@ -697,7 +697,9 @@ export default function App() {
         <div className="flex flex-1 flex-col gap-6">
           {(statusMessage || errorMessage) && (
             <div ref={alertRef} className={`${alertWidthClass} grid gap-3`}>
-              {statusMessage && <StatusCard message={statusMessage} tone={statusTone} onDismiss={() => setStatusMessage(null)} />}
+              {statusMessage && !errorMessage && (
+                <StatusCard message={statusMessage} tone={statusTone} onDismiss={() => setStatusMessage(null)} />
+              )}
               {errorMessage && <StatusCard message={errorMessage} tone="error" onDismiss={() => setErrorMessage(null)} />}
             </div>
           )}
