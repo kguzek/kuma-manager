@@ -45,7 +45,7 @@ export function UnmanagedMonitorsCard({ unmanagedMonitors, onApplySuggestedTag }
         {unmanagedMonitors.length === 0 && (
           <div className="flex items-center gap-3 rounded-2xl border bg-muted/20 p-4 text-sm text-muted-foreground">
             <PartyPopper className="size-5 text-emerald-300" />
-            <span>Hooray! All monitors are in sync.</span>
+            <span>Hooray! All monitors are being managed across all instances.</span>
           </div>
         )}
       </CardContent>

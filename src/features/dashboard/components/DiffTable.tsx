@@ -71,9 +71,14 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
                   onSyncFrom={onSyncFrom}
                 />
               ))}
-              {filteredRecords.length === 0 && (
+              {filteredRecords.length === 0 && monitorRecords.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={connectedInstances.length + 3} className="py-10 text-center text-muted-foreground">No managed monitors yet. Add monitor:* tags below to opt monitors into sync.</TableCell>
+                </TableRow>
+              )}
+              {filteredRecords.length === 0 && monitorRecords.length > 0 && (
+                <TableRow>
+                  <TableCell colSpan={connectedInstances.length + 3} className="py-10 text-center text-muted-foreground">{filter === "diff" ? "All monitors are in sync!" : filter === "sync" ? "All monitors are out of sync." : "No monitors match your search."}</TableCell>
                 </TableRow>
               )}
             </TableBody>

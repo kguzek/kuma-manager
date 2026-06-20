@@ -1,15 +1,14 @@
-import { LogOut, RefreshCw } from "lucide-react"
+import { LogOut } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { SessionState } from "@/types"
 
 type AppHeaderProps = {
   sessionState: SessionState
-  onRefresh: () => void
   onLogout: () => void
 }
 
-export function AppHeader({ sessionState, onRefresh, onLogout }: AppHeaderProps) {
+export function AppHeader({ sessionState, onLogout }: AppHeaderProps) {
   return (
     <header className={`flex flex-col justify-between gap-4 py-4 ${sessionState === "authenticated" ? "md:flex-row md:items-center" : "items-center text-center"}`}>
       <div>
@@ -26,7 +25,6 @@ export function AppHeader({ sessionState, onRefresh, onLogout }: AppHeaderProps)
       </div>
       {sessionState === "authenticated" && (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={onRefresh}><RefreshCw /> Refresh</Button>
           <Button variant="destructive" onClick={onLogout}><LogOut /> Log out</Button>
         </div>
       )}

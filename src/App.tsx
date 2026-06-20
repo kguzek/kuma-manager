@@ -119,7 +119,7 @@ export default function App() {
       startTransition(() => {
         setConnectedInstances(connected)
         setSessionState("authenticated")
-        setStatusMessage("Restored saved sessions.")
+        setStatusMessage(null)
         navigate(route.startsWith("/monitors/") ? route : "/dashboard")
       })
     } catch (error) {
@@ -299,44 +299,47 @@ export default function App() {
     return connectedInstances.find((instance) => instance.config.id === instanceId)?.config.name ?? instanceId
   }
 
+  const isLoginPage = route === "/login" || (sessionState === "authenticating" && configuredInstances.length > 0)
   const alertWidthClass = sessionState !== "authenticated"
-    ? route === "/login" ? "mx-auto w-full max-w-md" : "mx-auto w-full max-w-5xl"
+    ? isLoginPage ? "mx-auto w-full max-w-md" : "mx-auto w-full max-w-5xl"
     : route.startsWith("/monitors/") ? "mx-auto w-full max-w-3xl" : "w-full"
   const statusTone = sessionState === "authenticating" ? "loading" : "success"
 
   return (
-    <main className="dot-grid-bg min-h-svh px-4 py-6 text-foreground sm:px-6 lg:px-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <AppHeader sessionState={sessionState} onRefresh={refreshMonitors} onLogout={logout} />
-        {(statusMessage || errorMessage) && (
-          <div className={`${alertWidthClass} grid gap-3`}>
-            {statusMessage && <StatusCard message={statusMessage} tone={statusTone} onDismiss={() => setStatusMessage(null)} />}
-            {errorMessage && <StatusCard message={errorMessage} tone="error" onDismiss={() => setErrorMessage(null)} />}
-          </div>
-        )}
-        {sessionState !== "authenticated" ? (
-          <AuthFlow
-            route={route === "/instances" ? "/instances" : "/login"}
-            instances={instances}
-            authenticating={sessionState === "authenticating"}
-            onInstancesChange={setInstances}
-            onNavigate={navigate}
-            onPasswordLogin={authenticateWithPassword}
-          />
-        ) : route.startsWith("/monitors/") ? (
-          <MonitorPage route={route} connectedInstances={connectedInstances} monitorRecords={monitorRecords} onBack={() => navigate("/dashboard")} onNavigate={navigate} onSave={saveMonitorDetails} onRenameTag={renameMonitorTag} />
-        ) : (
-          <DashboardPage
-            connectedInstances={connectedInstances}
-            differences={differences}
-            monitorRecords={monitorRecords}
-            unmanagedMonitors={unmanagedMonitors}
-            monitorGroups={monitorGroups}
-            onSyncFrom={syncFrom}
-            onApplySuggestedTag={applySuggestedTag}
-            onNavigate={navigate}
-          />
-        )}
+    <main className="dot-grid-bg flex min-h-svh flex-col px-4 py-6 text-foreground sm:px-6 lg:px-10">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6">
+        <AppHeader sessionState={sessionState} onLogout={logout} />
+        <div className="flex flex-1 flex-col gap-6">
+          {(statusMessage || errorMessage) && (
+            <div className={`${alertWidthClass} grid gap-3`}>
+              {statusMessage && <StatusCard message={statusMessage} tone={statusTone} onDismiss={() => setStatusMessage(null)} />}
+              {errorMessage && <StatusCard message={errorMessage} tone="error" onDismiss={() => setErrorMessage(null)} />}
+            </div>
+          )}
+          {sessionState !== "authenticated" ? (
+            <AuthFlow
+              route={route === "/instances" ? "/instances" : "/login"}
+              instances={instances}
+              authenticating={sessionState === "authenticating"}
+              onInstancesChange={setInstances}
+              onNavigate={navigate}
+              onPasswordLogin={authenticateWithPassword}
+            />
+          ) : route.startsWith("/monitors/") ? (
+            <MonitorPage route={route} connectedInstances={connectedInstances} monitorRecords={monitorRecords} onBack={() => navigate("/dashboard")} onNavigate={navigate} onSave={saveMonitorDetails} onRenameTag={renameMonitorTag} />
+          ) : (
+            <DashboardPage
+              connectedInstances={connectedInstances}
+              differences={differences}
+              monitorRecords={monitorRecords}
+              unmanagedMonitors={unmanagedMonitors}
+              monitorGroups={monitorGroups}
+              onSyncFrom={syncFrom}
+              onApplySuggestedTag={applySuggestedTag}
+              onNavigate={navigate}
+            />
+          )}
+        </div>
         <AppFooter />
       </div>
     </main>
