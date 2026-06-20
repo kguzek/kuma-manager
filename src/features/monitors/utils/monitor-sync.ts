@@ -1,4 +1,4 @@
-import type { ConnectedKumaInstance, KumaMonitor, MonitorDifference, MonitorSyncRecord } from "@/lib/types"
+import type { ConnectedKumaInstance, KumaMonitor, MonitorDifference, MonitorSyncRecord } from "@/types"
 
 const SYNC_TAG_PREFIX = "monitor:"
 const IGNORED_MONITOR_FIELDS = new Set([
@@ -32,10 +32,7 @@ export function getMonitorDomain(monitor: KumaMonitor): string | null {
     }
   }
 
-  if (typeof monitor.hostname === "string" && monitor.hostname.trim()) {
-    return monitor.hostname.trim()
-  }
-
+  if (typeof monitor.hostname === "string" && monitor.hostname.trim()) return monitor.hostname.trim()
   return null
 }
 

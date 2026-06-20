@@ -1,4 +1,4 @@
-import type { KumaInstanceConfig, StoredKumaToken } from "@/lib/types"
+import type { KumaInstanceConfig, StoredKumaToken } from "@/types"
 
 const INSTANCE_KEY = "kuma-manager.instances"
 const TOKEN_KEY = "kuma-manager.tokens"

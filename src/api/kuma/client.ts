@@ -6,7 +6,7 @@ import type {
   KumaLoginResult,
   KumaMonitor,
   KumaTagListResult,
-} from "@/lib/types"
+} from "@/types"
 
 type KumaServerEvents = {
   monitorList: (payload: Record<string, KumaMonitor>) => void
@@ -74,14 +74,10 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
   return {
     instance: { ...instance, url: normalizedUrl },
     connect: () => connectSocket(socket, normalizedUrl),
-    login: (credentials) =>
-      emitWithCallback(socket, "login", { ...credentials, remember: true }),
+    login: (credentials) => emitWithCallback(socket, "login", { ...credentials, remember: true }),
     loginByToken: (token) => emitWithCallback(socket, "loginByToken", token),
     getMonitors: async () => {
-      if (Object.keys(monitorList).length > 0) {
-        return Object.values(monitorList)
-      }
-
+      if (Object.keys(monitorList).length > 0) return Object.values(monitorList)
       return waitForMonitorList(socket)
     },
     addMonitor: (monitor) => emitWithCallback(socket, "add", stripRuntimeMonitorFields(monitor)),
@@ -142,9 +138,7 @@ function connectSocket(socket: Socket<KumaServerEvents, KumaClientEvents>, url: 
 function emitWithCallback<Event extends keyof KumaClientEvents>(
   socket: Socket<KumaServerEvents, KumaClientEvents>,
   event: Event,
-  ...args: Parameters<KumaClientEvents[Event]> extends [...infer Payload, (response: infer Response) => void]
-    ? Payload
-    : never
+  ...args: Parameters<KumaClientEvents[Event]> extends [...infer Payload, (response: infer Response) => void] ? Payload : never
 ) {
   type Response = Parameters<KumaClientEvents[Event]> extends [...unknown[], (response: infer R) => void] ? R : never
 

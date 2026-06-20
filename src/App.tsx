@@ -1,70 +1,30 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react"
-import { useFieldArray, useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { AlertCircle, ArrowLeft, ArrowRight, ArrowRightLeft, CheckCircle2, ChevronRight, KeyRound, Link, LogOut, Pencil, Plus, RefreshCw, Save, Server, ShieldCheck, Tags, Trash2, X, type LucideIcon } from "lucide-react"
-import { z } from "zod"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
-import { Switch } from "@/components/ui/switch"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { createKumaApiClient, type KumaApiClient } from "@/lib/kuma-api"
-import { clearTokens, loadInstances, loadTokens, saveInstances, saveTokens } from "@/lib/storage"
-import type { ConnectedKumaInstance, KumaInstanceConfig, KumaMonitor, StoredKumaToken } from "@/lib/types"
-import type { MonitorDifference } from "@/lib/types"
-import { buildMonitorRecords, diffMonitorRecord, getMonitorGroupViews, getSuggestedMonitorSyncTag, getUnmanagedMonitors, prepareMonitorForCreate, prepareMonitorForEdit } from "@/lib/monitor-sync"
-
-const instanceSchema = z.object({
-  instances: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string().min(1, "Name is required"),
-        url: z.string().min(1, "URL is required"),
-      }),
-    )
-    .min(1, "Add at least one Kuma instance"),
-})
-
-type InstanceFormValues = z.infer<typeof instanceSchema>
-type LoginCredentials = Record<string, { username: string; password: string }>
-type LoginFormValues = {
-  separate: boolean
-  username: string
-  password: string
-  credentials: LoginCredentials
-}
-type MonitorDetailsValues = {
-  name: string
-  url: string
-  interval: number
-  retryInterval: number
-  maxretries: number
-}
-type SessionState = "configuring" | "authenticating" | "authenticated"
-type AppRoute = "/instances" | "/login" | "/dashboard" | `/monitors/${string}`
+import { AppHeader } from "@/components/layout/AppHeader"
+import { StatusCard } from "@/components/layout/StatusCard"
+import { AuthFlow } from "@/features/auth/components/AuthFlow"
+import { DashboardPage } from "@/features/dashboard/components/DashboardPage"
+import { MonitorPage } from "@/features/monitors/components/MonitorPage"
+import { useAppRoute } from "@/hooks/useAppRoute"
+import { createKumaApiClient } from "@/api/kuma/client"
+import { buildMonitorRecords, diffMonitorRecord, getMonitorGroupViews, getUnmanagedMonitors, prepareMonitorForCreate, prepareMonitorForEdit } from "@/features/monitors/utils/monitor-sync"
+import { clearTokens, loadInstances, loadTokens, saveInstances, saveTokens } from "@/utils/storage"
+import type { KumaApiClient } from "@/api/kuma/client"
+import type { ConnectedKumaInstance, KumaInstanceConfig, KumaMonitor, LoginCredentials, MonitorDetailsValues, MonitorDifference, SessionState, StoredKumaToken } from "@/types"
 
 export default function App() {
   const [instances, setInstances] = useState<KumaInstanceConfig[]>(() => loadInstances())
   const [tokens, setTokens] = useState<Record<string, StoredKumaToken>>(() => loadTokens())
   const [connectedInstances, setConnectedInstances] = useState<ConnectedKumaInstance[]>([])
   const [sessionState, setSessionState] = useState<SessionState>("configuring")
-  const [route, setRoute] = useState<AppRoute>(() => getInitialRoute())
+  const { route, navigate } = useAppRoute()
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const clientsRef = useRef<Record<string, KumaApiClient>>({})
   const attemptedSavedLoginRef = useRef(false)
 
-  const configuredInstances = useMemo(
-    () => instances.filter((instance) => instance.url.trim()),
-    [instances],
-  )
+  const configuredInstances = useMemo(() => instances.filter((instance) => instance.url.trim()), [instances])
   const canRestoreSavedLogin = configuredInstances.length > 0 && configuredInstances.every((instance) => tokens[instance.id]?.token)
-
   const monitorRecords = useMemo(() => buildMonitorRecords(connectedInstances), [connectedInstances])
   const differences = useMemo(
     () => monitorRecords.map((record) => diffMonitorRecord(record, connectedInstances)).filter((diff): diff is MonitorDifference => Boolean(diff)),
@@ -82,21 +42,10 @@ export default function App() {
   }, [tokens])
 
   useEffect(() => {
-    const onPopState = () => setRoute(getInitialRoute())
-    window.addEventListener("popstate", onPopState)
-    return () => window.removeEventListener("popstate", onPopState)
-  }, [])
-
-  useEffect(() => {
     if (!canRestoreSavedLogin || attemptedSavedLoginRef.current || sessionState !== "configuring") return
     attemptedSavedLoginRef.current = true
     void authenticateWithSavedTokens()
   }, [canRestoreSavedLogin, sessionState])
-
-  function navigate(nextRoute: AppRoute) {
-    window.history.pushState(null, "", nextRoute)
-    setRoute(nextRoute)
-  }
 
   async function authenticateWithPassword(credentialsByInstance: LoginCredentials) {
     setSessionState("authenticating")
@@ -108,6 +57,7 @@ export default function App() {
         configuredInstances.map(async (instance) => {
           const credentials = credentialsByInstance[instance.id]
           if (!credentials) throw new Error(`${instance.name}: missing credentials`)
+
           const client = createKumaApiClient(instance)
           await client.connect()
           const login = await client.login(credentials)
@@ -115,6 +65,7 @@ export default function App() {
             client.disconnect()
             throw new Error(`${instance.name}: ${login.msg ?? "login failed"}`)
           }
+
           const monitors = await client.getMonitors()
           clientsRef.current[instance.id] = client
           return { config: client.instance, token: login.token, monitors }
@@ -148,6 +99,7 @@ export default function App() {
         configuredInstances.map(async (instance) => {
           const stored = tokens[instance.id]
           if (!stored?.token) throw new Error(`${instance.name}: no saved token`)
+
           const client = createKumaApiClient(instance)
           await client.connect()
           const login = await client.loginByToken(stored.token)
@@ -155,6 +107,7 @@ export default function App() {
             client.disconnect()
             throw new Error(`${instance.name}: saved token rejected`)
           }
+
           const monitors = await client.getMonitors()
           clientsRef.current[instance.id] = client
           return { config: client.instance, token: stored.token, monitors }
@@ -162,10 +115,10 @@ export default function App() {
       )
 
       startTransition(() => {
-      setConnectedInstances(connected)
-      setSessionState("authenticated")
-      setStatusMessage("Restored saved sessions.")
-      navigate(route.startsWith("/monitors/") ? route : "/dashboard")
+        setConnectedInstances(connected)
+        setSessionState("authenticated")
+        setStatusMessage("Restored saved sessions.")
+        navigate(route.startsWith("/monitors/") ? route : "/dashboard")
       })
     } catch (error) {
       disconnectAll()
@@ -242,26 +195,6 @@ export default function App() {
     }
   }
 
-  function logout() {
-    disconnectAll()
-    clearTokens()
-    attemptedSavedLoginRef.current = false
-    setTokens({})
-    setConnectedInstances([])
-    setSessionState("configuring")
-    setStatusMessage("Signed out and cleared saved Kuma tokens.")
-    navigate("/instances")
-  }
-
-  function disconnectAll() {
-    Object.values(clientsRef.current).forEach((client) => client.disconnect())
-    clientsRef.current = {}
-  }
-
-  function instanceName(instanceId: string) {
-    return connectedInstances.find((instance) => instance.config.id === instanceId)?.config.name ?? instanceId
-  }
-
   async function saveMonitorDetails(tag: string, values: MonitorDetailsValues) {
     const record = monitorRecords.find((entry) => entry.tag === tag)
     if (!record) return
@@ -308,41 +241,40 @@ export default function App() {
     }
   }
 
+  function logout() {
+    disconnectAll()
+    clearTokens()
+    attemptedSavedLoginRef.current = false
+    setTokens({})
+    setConnectedInstances([])
+    setSessionState("configuring")
+    setStatusMessage("Signed out and cleared saved Kuma tokens.")
+    navigate("/instances")
+  }
+
+  function disconnectAll() {
+    Object.values(clientsRef.current).forEach((client) => client.disconnect())
+    clientsRef.current = {}
+  }
+
+  function instanceName(instanceId: string) {
+    return connectedInstances.find((instance) => instance.config.id === instanceId)?.config.name ?? instanceId
+  }
+
   const alertWidthClass = sessionState === "authenticated" ? "w-full" : route === "/login" ? "mx-auto w-full max-w-md" : "mx-auto w-full max-w-5xl"
 
   return (
     <main className="dot-grid-bg min-h-svh px-4 py-6 text-foreground sm:px-6 lg:px-10">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className={`flex flex-col justify-between gap-4 py-4 ${sessionState === "authenticated" ? "md:flex-row md:items-center" : "items-center text-center"}`}>
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Kuma Manager</h1>
-            {sessionState === "authenticated" ? (
-              <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
-                Comparing monitor config by <code className="rounded bg-muted px-1 py-0.5">monitor:</code> tags.
-              </p>
-            ) : (
-              <p className="mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">
-                Manage synchronized Uptime Kuma instances from one dashboard.
-              </p>
-            )}
-          </div>
-          {sessionState === "authenticated" && (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={refreshMonitors}><RefreshCw /> Refresh</Button>
-              <Button variant="destructive" onClick={logout}><LogOut /> Log out</Button>
-            </div>
-          )}
-        </header>
-
+        <AppHeader sessionState={sessionState} onRefresh={refreshMonitors} onLogout={logout} />
         {(statusMessage || errorMessage) && (
           <div className={`${alertWidthClass} grid gap-3`}>
             {statusMessage && <StatusCard message={statusMessage} tone="success" />}
             {errorMessage && <StatusCard message={errorMessage} tone="error" />}
           </div>
         )}
-
         {sessionState !== "authenticated" ? (
-          <AuthWall
+          <AuthFlow
             route={route === "/instances" ? "/instances" : "/login"}
             instances={instances}
             authenticating={sessionState === "authenticating"}
@@ -351,15 +283,9 @@ export default function App() {
             onPasswordLogin={authenticateWithPassword}
           />
         ) : route.startsWith("/monitors/") ? (
-          <MonitorPage
-            route={route}
-            connectedInstances={connectedInstances}
-            monitorRecords={monitorRecords}
-            onBack={() => navigate("/dashboard")}
-            onSave={saveMonitorDetails}
-          />
+          <MonitorPage route={route} connectedInstances={connectedInstances} monitorRecords={monitorRecords} onBack={() => navigate("/dashboard")} onSave={saveMonitorDetails} />
         ) : (
-          <Dashboard
+          <DashboardPage
             connectedInstances={connectedInstances}
             differences={differences}
             monitorRecords={monitorRecords}
@@ -372,562 +298,5 @@ export default function App() {
         )}
       </div>
     </main>
-  )
-}
-
-function AuthWall({
-  route,
-  instances,
-  authenticating,
-  onInstancesChange,
-  onNavigate,
-  onPasswordLogin,
-}: {
-  route: "/instances" | "/login"
-  instances: KumaInstanceConfig[]
-  authenticating: boolean
-  onInstancesChange: (instances: KumaInstanceConfig[]) => void
-  onNavigate: (route: AppRoute) => void
-  onPasswordLogin: (credentials: LoginCredentials) => Promise<void>
-}) {
-  const instanceForm = useForm<InstanceFormValues>({ resolver: zodResolver(instanceSchema), defaultValues: { instances } })
-  const loginForm = useForm<LoginFormValues>({
-    defaultValues: {
-      separate: false,
-      username: "",
-      password: "",
-      credentials: Object.fromEntries(instances.map((instance) => [instance.id, { username: "", password: "" }])),
-    },
-  })
-  const { fields, append, remove } = useFieldArray({ control: instanceForm.control, name: "instances" })
-  const watchedInstances = instanceForm.watch("instances")
-  const separateCredentials = loginForm.watch("separate")
-  const activeInstances = watchedInstances.filter((instance) => instance.url.trim())
-
-  useEffect(() => {
-    const subscription = instanceForm.watch((value) => {
-      const nextInstances = value.instances?.flatMap((instance) => {
-        if (!instance?.id) return []
-
-        return {
-          id: instance.id,
-          name: instance.name ?? "",
-          url: instance.url ?? "",
-        }
-      })
-
-      if (nextInstances?.length) onInstancesChange(nextInstances)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [instanceForm, onInstancesChange])
-
-  const goToLogin = instanceForm.handleSubmit((values) => {
-    onInstancesChange(values.instances)
-    onNavigate("/login")
-  })
-
-  function submitLogin(values: LoginFormValues) {
-    const credentials = values.separate
-      ? Object.fromEntries(activeInstances.map((instance) => [instance.id, values.credentials[instance.id] ?? { username: "", password: "" }]))
-      : Object.fromEntries(activeInstances.map((instance) => [instance.id, { username: values.username, password: values.password }]))
-
-    const missing = Object.entries(credentials).find(([, credential]) => !credential.username.trim() || !credential.password)
-    if (missing) {
-      const instance = activeInstances.find((entry) => entry.id === missing[0])
-      loginForm.setError("root", { message: `Enter credentials for ${instance?.name ?? "every instance"}.` })
-      return
-    }
-
-    void onPasswordLogin(credentials)
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-5xl">
-      <div className="mb-5 flex items-center justify-center gap-3 text-sm text-muted-foreground">
-        <StepPill active={route === "/instances"} icon={Server} label="Instances" />
-        <ChevronRight className="size-4" />
-        <StepPill active={route === "/login"} icon={KeyRound} label="Login" />
-      </div>
-
-      {route === "/instances" ? (
-        <Card className="setup-panel">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Add Kuma instances</CardTitle>
-            <CardDescription>Your instances are saved to this device automatically.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="flex flex-col gap-6" onSubmit={goToLogin}>
-              <div className="grid gap-4 md:grid-cols-2">
-                {fields.map((field, index) => (
-                  <Card key={field.id} className="instance-card relative overflow-hidden border-input">
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="grid size-9 place-items-center rounded-full bg-muted text-muted-foreground">
-                          <Server className="size-4" />
-                        </div>
-                        <CardTitle className="text-base">Instance {index + 1}</CardTitle>
-                      </div>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        disabled={fields.length === 1}
-                        aria-label="Remove instance"
-                        onClick={() => {
-                          const nextInstances = instanceForm.getValues("instances").filter((_, itemIndex) => itemIndex !== index)
-                          remove(index)
-                          onInstancesChange(nextInstances)
-                        }}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                      <Field data-invalid={!!instanceForm.formState.errors.instances?.[index]?.name}>
-                        <FieldLabel htmlFor={`instance-${index}-name`}>Name</FieldLabel>
-                        <Input id={`instance-${index}-name`} {...instanceForm.register(`instances.${index}.name`)} />
-                        <FieldError errors={[instanceForm.formState.errors.instances?.[index]?.name]} />
-                      </Field>
-                      <Field data-invalid={!!instanceForm.formState.errors.instances?.[index]?.url}>
-                        <FieldLabel htmlFor={`instance-${index}-url`}>URL</FieldLabel>
-                        <div className="relative">
-                          <Link className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input id={`instance-${index}-url`} className="pl-9" placeholder="https://kuma.example.com" {...instanceForm.register(`instances.${index}.url`)} />
-                        </div>
-                        <FieldError errors={[instanceForm.formState.errors.instances?.[index]?.url]} />
-                      </Field>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                <button
-                  type="button"
-                  className="add-instance-card group grid min-h-64 place-items-center rounded-xl border border-dashed p-6 text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  onClick={() => {
-                    const instance = { id: crypto.randomUUID(), name: `Kuma ${fields.length + 1}`, url: "" }
-                    const nextInstances = [...instanceForm.getValues("instances"), instance]
-                    append(instance)
-                    onInstancesChange(nextInstances)
-                  }}
-                >
-                  <span className="grid gap-3 text-center">
-                    <span className="add-instance-plus mx-auto grid size-14 place-items-center rounded-full">
-                      <Plus className="size-7" />
-                    </span>
-                    <span className="text-sm font-medium">Add instance</span>
-                  </span>
-                </button>
-              </div>
-
-              <div className="flex justify-end">
-                <Button type="submit" size="lg" disabled={activeInstances.length === 0}>
-                  Next <ChevronRight />
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="setup-panel mx-auto max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-2 grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
-              <ShieldCheck className="size-5" />
-            </div>
-            <CardTitle className="text-2xl">Sign in</CardTitle>
-            <CardDescription>{activeInstances.length} instance{activeInstances.length === 1 ? "" : "s"} configured</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="flex flex-col gap-5" onSubmit={loginForm.handleSubmit(submitLogin)}>
-              {authenticating && (
-                <div className="flex items-center gap-2 rounded-xl border bg-muted/40 p-3 text-sm text-muted-foreground">
-                  <RefreshCw className="size-4 animate-spin" /> Signing in...
-                </div>
-              )}
-
-              <Field orientation="horizontal" className="items-center justify-between rounded-xl border bg-muted/30 p-3">
-                <div>
-                  <FieldLabel htmlFor="separate-credentials">Separate credentials</FieldLabel>
-                  <FieldDescription>Use different login details per instance.</FieldDescription>
-                </div>
-                <Switch
-                  id="separate-credentials"
-                  checked={separateCredentials}
-                  onCheckedChange={(checked) => loginForm.setValue("separate", checked, { shouldDirty: true })}
-                />
-              </Field>
-
-              {separateCredentials ? (
-                <div className="grid gap-4">
-                  {activeInstances.map((instance) => (
-                    <div key={instance.id} className="grid gap-3 rounded-xl border p-3">
-                      <div className="flex items-center gap-2 text-sm font-medium"><Server className="size-4" /> {instance.name}</div>
-                      <Field>
-                        <FieldLabel htmlFor={`${instance.id}-username`}>Username</FieldLabel>
-                        <Input id={`${instance.id}-username`} autoComplete="username" {...loginForm.register(`credentials.${instance.id}.username`)} />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor={`${instance.id}-password`}>Password</FieldLabel>
-                        <Input id={`${instance.id}-password`} type="password" autoComplete="current-password" {...loginForm.register(`credentials.${instance.id}.password`)} />
-                      </Field>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <Field>
-                    <FieldLabel htmlFor="username">Username</FieldLabel>
-                    <Input id="username" autoComplete="username" {...loginForm.register("username")} />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="password">Password</FieldLabel>
-                    <Input id="password" type="password" autoComplete="current-password" {...loginForm.register("password")} />
-                    <FieldDescription>Used for every instance.</FieldDescription>
-                  </Field>
-                </>
-              )}
-
-              <FieldError errors={[loginForm.formState.errors.root]} />
-              <div className="grid gap-2">
-                <Button type="submit" size="lg" disabled={authenticating}>
-                  {authenticating ? <RefreshCw className="animate-spin" /> : <ShieldCheck />} Sign in
-                </Button>
-              </div>
-              <Button type="button" variant="ghost" onClick={() => onNavigate("/instances")}>
-                <ArrowLeft /> Back
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
-}
-
-function StepPill({ active, icon: Icon, label }: { active: boolean; icon: LucideIcon; label: string }) {
-  return (
-    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 transition ${active ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card text-muted-foreground"}`}>
-      <Icon className="size-3.5" />
-      {label}
-    </div>
-  )
-}
-
-function Dashboard({
-  connectedInstances,
-  differences,
-  monitorRecords,
-  unmanagedMonitors,
-  monitorGroups,
-  onSyncFrom,
-  onApplySuggestedTag,
-  onNavigate,
-}: {
-  connectedInstances: ConnectedKumaInstance[]
-  differences: MonitorDifference[]
-  monitorRecords: ReturnType<typeof buildMonitorRecords>
-  unmanagedMonitors: ReturnType<typeof getUnmanagedMonitors>
-  monitorGroups: ReturnType<typeof getMonitorGroupViews>
-  onSyncFrom: (sourceInstanceId: string, tag: string) => Promise<void>
-  onApplySuggestedTag: (instanceId: string, monitor: KumaMonitor, tag: string) => Promise<void>
-  onNavigate: (route: AppRoute) => void
-}) {
-  const [customTags, setCustomTags] = useState<Record<string, string>>({})
-  const [editingTags, setEditingTags] = useState<Record<string, boolean>>({})
-
-  return (
-    <div className="grid gap-6">
-      <section className="grid gap-4 md:grid-cols-3">
-        <MetricCard title="Instances" value={connectedInstances.length} description="Authenticated Kuma servers" />
-        <MetricCard title="Managed monitors" value={monitorRecords.length} description="Records with monitor:* tags" />
-        <MetricCard title="Diffs" value={differences.length} description="Missing or different configs" />
-      </section>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ArrowRightLeft className="size-5" /> Diff page</CardTitle>
-          <CardDescription>Only monitors with at least one <code>monitor:</code> tag are compared. History, current status, ping, cert info, and IDs are ignored.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Sync tag</TableHead>
-                  {connectedInstances.map((instance) => <TableHead key={instance.config.id}>{instance.config.name}</TableHead>)}
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {monitorRecords.map((record) => {
-                  const diff = differences.find((entry) => entry.tag === record.tag)
-                  return (
-                    <TableRow key={record.tag}>
-                      <TableCell>
-                        <Button
-                          variant="link"
-                          className="h-auto p-0 font-mono text-xs"
-                          onClick={() => onNavigate(`/monitors/${encodeURIComponent(stripMonitorPrefix(record.tag))}`)}
-                        >
-                          {record.tag} <ArrowRight className="size-3" />
-                        </Button>
-                      </TableCell>
-                      {connectedInstances.map((instance) => {
-                        const monitor = record.monitorsByInstance[instance.config.id]
-                        return <TableCell key={instance.config.id}>{monitor ? monitor.name : <span className="text-muted-foreground">Missing</span>}</TableCell>
-                      })}
-                      <TableCell>
-                        {diff ? <Badge variant="destructive">{diff.description}</Badge> : <Badge variant="secondary"><CheckCircle2 /> In sync</Badge>}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {connectedInstances.map((instance) => record.monitorsByInstance[instance.config.id] && (
-                            <Button key={instance.config.id} size="sm" variant="outline" onClick={() => onSyncFrom(instance.config.id, record.tag)}>
-                              Use {instance.config.name}
-                            </Button>
-                          ))}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-                {monitorRecords.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={connectedInstances.length + 3} className="py-10 text-center text-muted-foreground">No managed monitors yet. Add monitor:* tags below to opt monitors into sync.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Server className="size-5" /> Monitor groups</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {monitorGroups.map(({ instance, group, children }) => (
-            <div key={`${instance.config.id}-${group.id}`} className="rounded-2xl border bg-muted/20 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 font-medium"><Server className="size-4 text-muted-foreground" /> {group.name}</div>
-                <Badge variant="outline">{instance.config.name}</Badge>
-              </div>
-              <div className="mt-3 grid gap-2 border-l pl-4">
-                {children.map((monitor) => (
-                  <div key={monitor.id} className="flex items-center justify-between gap-3 rounded-lg bg-background/40 px-3 py-2 text-sm">
-                    <span>{monitor.name}</span>
-                    <span className="text-muted-foreground">{monitor.url ?? monitor.hostname ?? monitor.type}</span>
-                  </div>
-                ))}
-                {children.length === 0 && <p className="text-sm text-muted-foreground">No child monitors.</p>}
-              </div>
-            </div>
-          ))}
-          {monitorGroups.length === 0 && <p className="text-sm text-muted-foreground">No monitor groups found.</p>}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Tags className="size-5" /> Unmanaged monitors</CardTitle>
-          <CardDescription>These monitors do not have a <code>monitor:</code> tag. Suggested tags are initially based on the URL or hostname domain.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {unmanagedMonitors.map(({ instance, monitor, suggestedTag }) => (
-            <div key={`${instance.config.id}-${monitor.id}`} className="flex flex-col justify-between gap-3 rounded-2xl border p-4 md:flex-row md:items-center">
-              <div>
-                <div className="font-medium">{monitor.name}</div>
-                <div className="text-sm text-muted-foreground">{instance.config.name} · {monitor.url ?? monitor.hostname ?? "No URL/hostname"}</div>
-              </div>
-              <div className="flex min-w-80 flex-wrap items-center justify-end gap-2">
-                {editingTags[`${instance.config.id}-${monitor.id}`] ? (
-                  <InputGroup className="w-72 font-mono">
-                    <InputGroupAddon>monitor:</InputGroupAddon>
-                    <InputGroupInput
-                      value={getTagSuffix(customTags[`${instance.config.id}-${monitor.id}`] ?? suggestedTag)}
-                      placeholder="example.com"
-                      onChange={(event) => setCustomTags((current) => ({
-                        ...current,
-                        [`${instance.config.id}-${monitor.id}`]: `monitor:${event.target.value.replace(/^monitor:/, "")}`,
-                      }))}
-                    />
-                  </InputGroup>
-                ) : (
-                  <Badge variant="outline" className="w-72 justify-start font-mono">
-                    {suggestedTag ?? "No suggestion"}
-                  </Badge>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label="Edit tag"
-                  onClick={() => {
-                    const key = `${instance.config.id}-${monitor.id}`
-                    setCustomTags((current) => ({ ...current, [key]: current[key] ?? suggestedTag ?? "monitor:" }))
-                    setEditingTags((current) => ({ ...current, [key]: !current[key] }))
-                  }}
-                >
-                  {editingTags[`${instance.config.id}-${monitor.id}`] ? <X /> : <Pencil />}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!getPendingTag(customTags[`${instance.config.id}-${monitor.id}`], suggestedTag).startsWith("monitor:")}
-                  onClick={() => {
-                    const tag = getPendingTag(customTags[`${instance.config.id}-${monitor.id}`], suggestedTag)
-                    void onApplySuggestedTag(instance.config.id, monitor, tag)
-                  }}
-                >
-                  <Tags /> Add
-                </Button>
-              </div>
-            </div>
-          ))}
-          {unmanagedMonitors.length === 0 && <p className="text-sm text-muted-foreground">Every loaded monitor has a sync tag.</p>}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function MetricCard({ title, value, description }: { title: string; value: number; description: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardDescription>{title}</CardDescription>
-        <CardTitle className="text-3xl">{value}</CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">{description}</CardContent>
-    </Card>
-  )
-}
-
-function MonitorPage({
-  route,
-  connectedInstances,
-  monitorRecords,
-  onBack,
-  onSave,
-}: {
-  route: AppRoute
-  connectedInstances: ConnectedKumaInstance[]
-  monitorRecords: ReturnType<typeof buildMonitorRecords>
-  onBack: () => void
-  onSave: (tag: string, values: MonitorDetailsValues) => Promise<void>
-}) {
-  const tagSuffix = route.startsWith("/monitors/") ? decodeURIComponent(route.replace("/monitors/", "")) : ""
-  const tag = `monitor:${tagSuffix}`
-  const record = monitorRecords.find((entry) => entry.tag === tag)
-  const firstMonitor = connectedInstances.map((instance) => record?.monitorsByInstance[instance.config.id]).find(Boolean)
-  const form = useForm<MonitorDetailsValues>({
-    values: {
-      name: firstMonitor?.name ?? "",
-      url: typeof firstMonitor?.url === "string" ? firstMonitor.url : "",
-      interval: Number(firstMonitor?.interval ?? 60),
-      retryInterval: Number(firstMonitor?.retryInterval ?? 60),
-      maxretries: Number(firstMonitor?.maxretries ?? 0),
-    },
-  })
-
-  if (!record || !firstMonitor) {
-    return (
-      <Card className="mx-auto w-full max-w-2xl">
-        <CardHeader>
-          <CardTitle>Monitor not found</CardTitle>
-          <CardDescription>No synced monitor exists for <code>{tag}</code>.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={onBack}><ArrowLeft /> Back</Button>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <Card className="mx-auto w-full max-w-3xl">
-      <CardHeader>
-        <div className="mb-2">
-          <Button variant="ghost" onClick={onBack}><ArrowLeft /> Back</Button>
-        </div>
-        <CardTitle className="flex items-center gap-2"><Tags className="size-5" /> {tag}</CardTitle>
-        <CardDescription>Edit shared monitor fields and save them to every instance where this tag exists.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="grid gap-5" onSubmit={form.handleSubmit((values) => onSave(tag, values))}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="monitor-name">Name</FieldLabel>
-              <Input id="monitor-name" {...form.register("name", { required: true })} />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="monitor-url">URL</FieldLabel>
-              <Input id="monitor-url" {...form.register("url")} />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="monitor-interval">Interval seconds</FieldLabel>
-              <Input id="monitor-interval" type="number" min={1} {...form.register("interval", { valueAsNumber: true })} />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="monitor-retry-interval">Retry interval seconds</FieldLabel>
-              <Input id="monitor-retry-interval" type="number" min={1} {...form.register("retryInterval", { valueAsNumber: true })} />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="monitor-max-retries">Max retries</FieldLabel>
-              <Input id="monitor-max-retries" type="number" min={0} {...form.register("maxretries", { valueAsNumber: true })} />
-            </Field>
-          </div>
-
-          <div className="rounded-2xl border bg-muted/20 p-4">
-            <div className="mb-3 text-sm font-medium">Instances</div>
-            <div className="grid gap-2">
-              {connectedInstances.map((instance) => {
-                const monitor = record.monitorsByInstance[instance.config.id]
-                return (
-                  <div key={instance.config.id} className="flex items-center justify-between gap-3 rounded-lg bg-background/40 px-3 py-2 text-sm">
-                    <span>{instance.config.name}</span>
-                    {monitor ? <Badge variant="secondary">{monitor.name}</Badge> : <Badge variant="destructive">Missing</Badge>}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button type="submit"><Save /> Save to all</Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
-  )
-}
-
-function getPendingTag(customTag: string | undefined, suggestedTag: string | null) {
-  return (customTag ?? suggestedTag ?? "").trim()
-}
-
-function stripMonitorPrefix(tag: string) {
-  return tag.startsWith("monitor:") ? tag.slice("monitor:".length) : tag
-}
-
-function getTagSuffix(tag: string | null | undefined) {
-  return stripMonitorPrefix(tag ?? "")
-}
-
-function getInitialRoute(): AppRoute {
-  if (window.location.pathname === "/login") return "/login"
-  if (window.location.pathname === "/dashboard") return "/dashboard"
-  if (window.location.pathname.startsWith("/monitors/")) return window.location.pathname as AppRoute
-  return "/instances"
-}
-
-function StatusCard({ message, tone }: { message: string; tone: "success" | "error" }) {
-  const Icon = tone === "success" ? CheckCircle2 : AlertCircle
-  return (
-    <div className={`flex items-start gap-3 rounded-2xl border p-4 text-sm ${tone === "error" ? "border-destructive/30 bg-destructive/10 text-destructive" : "bg-background/80"}`}>
-      <Icon className="mt-0.5 size-4" />
-      <div>{message}</div>
-    </div>
   )
 }
