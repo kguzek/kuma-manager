@@ -62,12 +62,13 @@ export default function App() {
     saveTokens(tokens)
   }, [tokens])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: authenticateWithSavedTokens intentionally excluded to avoid infinite loops
   useEffect(() => {
     if (!canRestoreSavedLogin || attemptedSavedLoginRef.current || sessionState !== "configuring") return
     attemptedSavedLoginRef.current = true
     if (!route.startsWith("/monitors/") && route !== "/login") navigate("/login")
     void authenticateWithSavedTokens()
-  }, [canRestoreSavedLogin, sessionState])
+  }, [canRestoreSavedLogin, sessionState, route, navigate])
 
   async function authenticateWithPassword(credentialsByInstance: LoginCredentials) {
     setSessionState("authenticating")
@@ -339,7 +340,9 @@ export default function App() {
   }
 
   function disconnectAll() {
-    Object.values(clientsRef.current).forEach((client) => client.disconnect())
+    for (const client of Object.values(clientsRef.current)) {
+      client.disconnect()
+    }
     clientsRef.current = {}
   }
 

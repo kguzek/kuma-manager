@@ -154,7 +154,7 @@ function connectSocket(socket: Socket<KumaServerEvents, KumaClientEvents>, url: 
 function emitWithCallback<Event extends keyof KumaClientEvents>(
   socket: Socket<KumaServerEvents, KumaClientEvents>,
   event: Event,
-  ...args: Parameters<KumaClientEvents[Event]> extends [...infer Payload, (response: infer Response) => void] ? Payload : never
+  ...args: Parameters<KumaClientEvents[Event]> extends [...infer Payload, (response: infer _Response) => void] ? Payload : never
 ) {
   type Response = Parameters<KumaClientEvents[Event]> extends [...unknown[], (response: infer R) => void] ? R : never
 

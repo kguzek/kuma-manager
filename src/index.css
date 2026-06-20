@@ -132,14 +132,14 @@ body {
 }
 
 .instance-card {
-  background-color: oklch(0.19 0 0 / 96%) !important;
+  background-color: oklch(0.19 0 0 / 96%);
   transition: border-color 160ms ease;
 }
 
 .instance-card:hover,
 .instance-card:focus-within,
 .instance-card:active {
-  background-color: oklch(0.19 0 0 / 96%) !important;
+  background-color: oklch(0.19 0 0 / 96%);
 }
 
 .add-instance-card {

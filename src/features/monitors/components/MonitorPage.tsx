@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Switch } from "@/components/ui/switch"
 import { SettingsDiff } from "@/features/monitors/components/SettingsDiff"
-import { diffMonitorRecord, getMonitorGroupViews } from "@/features/monitors/utils/monitor-sync"
+import { diffMonitorRecord, type getMonitorGroupViews } from "@/features/monitors/utils/monitor-sync"
 import { getFieldGroupLabel, getFieldGroupsForMonitor, getFieldLabel } from "@/features/monitors/utils/settings-groups"
 import { getMonitorSettingDiffs, getMonitorSettingFields } from "@/features/monitors/utils/settings-diff"
 import { getTagSuffix } from "@/lib/monitor-tags"
@@ -34,7 +34,7 @@ export function MonitorPage({
   connectedInstances,
   monitorRecords,
   monitorGroups,
-  onBack,
+  onBack: _onBack,
   onNavigate,
   onSave,
   onRenameTag,
@@ -43,6 +43,7 @@ export function MonitorPage({
   const [tagSuffixInput, setTagSuffixInput] = useState("")
   const tagSuffix = route.startsWith("/monitors/") ? decodeURIComponent(route.replace("/monitors/", "")) : ""
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tagSuffix intentionally triggers state reset on route change
   useEffect(() => {
     setEditingTag(false)
     setTagSuffixInput("")
@@ -65,6 +66,9 @@ export function MonitorPage({
       ? (monitorGroups.find((g) => g.instance.config.id === firstInstanceId && g.group.id === firstMonitor.parent)?.group.name ?? "")
       : ""
   const [selectedGroup, setSelectedGroup] = useState(currentGroupName)
+  const defaultOpenLabels = groups.filter((g) => g.defaultOpen).map((g) => g.label)
+  const [accordionValues, setAccordionValues] = useState<string[]>(defaultOpenLabels)
+  const [searchQuery, setSearchQuery] = useState("")
 
   if (!record || !firstMonitor) {
     return (
@@ -90,12 +94,10 @@ export function MonitorPage({
   const diffFieldSet = new Set(settingDiffs.map((d) => d.field))
   const structuralDiff = diffMonitorRecord(record, connectedInstances)
   const pendingTag = `monitor:${tagSuffixInput.trim()}`
-  const defaultOpenLabels = groups.filter((g) => g.defaultOpen).map((g) => g.label)
-  const [accordionValues, setAccordionValues] = useState<string[]>(defaultOpenLabels)
-  const [searchQuery, setSearchQuery] = useState("")
 
+  const monitor = firstMonitor
   const isReadOnlyField = (field: string) => {
-    const v = firstMonitor![field]
+    const v = monitor[field]
     return typeof v === "object" && v !== null
   }
 
@@ -138,7 +140,7 @@ export function MonitorPage({
   }
 
   function renderField(field: string) {
-    const value = firstMonitor![field]
+    const value = monitor[field]
     const label = getFieldLabel(field)
     const isDiff = diffFieldSet.has(field)
 

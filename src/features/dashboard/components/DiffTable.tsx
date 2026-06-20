@@ -1,19 +1,5 @@
 import { useCallback, useState } from "react"
-import {
-  AlertCircle,
-  ArrowRightLeft,
-  CheckCircle2,
-  Grid2x2,
-  List,
-  Plus,
-  RefreshCw,
-  SplitSquareHorizontal,
-  SplitSquareVertical,
-  SquareCenterlineDashedHorizontal,
-  SquareCheck,
-  SquareEqual,
-  SquareSlash,
-} from "lucide-react"
+import { AlertCircle, ArrowRightLeft, CheckCircle2, List, Plus, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { RouteLink } from "@/components/navigation/RouteLink"
@@ -105,13 +91,13 @@ export function DiffTable({
           />
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>
-              <Grid2x2 className="size-4" /> All
+              <List className="size-4" /> All
             </Button>
             <Button size="sm" variant={filter === "diff" ? "default" : "outline"} onClick={() => setFilter("diff")}>
-              <SquareCenterlineDashedHorizontal className="size-4" /> Changed
+              <AlertCircle className="size-4" /> Changed
             </Button>
             <Button size="sm" variant={filter === "sync" ? "default" : "outline"} onClick={() => setFilter("sync")}>
-              <SquareEqual className="size-4" /> In sync
+              <CheckCircle2 className="size-4" /> In sync
             </Button>
           </div>
         </div>

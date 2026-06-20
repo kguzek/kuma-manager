@@ -10,8 +10,8 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Switch } from "@/components/ui/switch"
-import { getMonitorGroupViews } from "@/features/monitors/utils/monitor-sync"
-import { FIELD_LABELS, getFieldLabel, KNOWN_FIELD_GROUPS } from "@/features/monitors/utils/settings-groups"
+import type { getMonitorGroupViews } from "@/features/monitors/utils/monitor-sync"
+import { FIELD_LABELS, KNOWN_FIELD_GROUPS } from "@/features/monitors/utils/settings-groups"
 import type { AppRoute, MonitorDetailsValues } from "@/types"
 
 const DEFAULT_MONITOR_VALUES: Record<string, unknown> = {
@@ -132,7 +132,7 @@ type CreateMonitorPageProps = {
   onCreate: (tag: string, values: MonitorDetailsValues, groupName?: string) => Promise<void>
 }
 
-export function CreateMonitorPage({ monitorGroups, onBack, onNavigate, onCreate }: CreateMonitorPageProps) {
+export function CreateMonitorPage({ monitorGroups, onBack: _onBack, onNavigate, onCreate }: CreateMonitorPageProps) {
   const [tagSuffix, setTagSuffix] = useState("")
   const [selectedGroup, setSelectedGroup] = useState("")
 

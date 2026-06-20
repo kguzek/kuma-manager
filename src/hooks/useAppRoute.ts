@@ -12,6 +12,7 @@ export function useAppRoute() {
     return () => window.removeEventListener("popstate", onPopState)
   }, [])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally scroll on route change
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [route])
