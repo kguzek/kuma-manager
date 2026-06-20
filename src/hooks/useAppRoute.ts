@@ -13,8 +13,17 @@ export function useAppRoute() {
   }, [])
 
   function navigate(nextRoute: AppRoute) {
-    window.history.pushState(null, "", nextRoute)
-    setRoute(nextRoute)
+    const updateRoute = () => {
+      window.history.pushState(null, "", nextRoute)
+      setRoute(nextRoute)
+    }
+
+    if (document.startViewTransition) {
+      document.startViewTransition(updateRoute)
+      return
+    }
+
+    updateRoute()
   }
 
   return { route, navigate }

@@ -30,6 +30,7 @@ type KumaClientEvents = {
   getTags: (callback: (response: KumaTagListResult) => void) => void
   addTag: (tag: { name: string; color: string }, callback: (response: KumaCommandResult & { tag?: { id: number; name: string; color: string } }) => void) => void
   addMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
+  deleteMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
 }
 
 export type KumaApiClient = {
@@ -42,6 +43,8 @@ export type KumaApiClient = {
   editMonitor: (monitor: KumaMonitor) => Promise<KumaCommandResult>
   deleteMonitor: (monitorID: number) => Promise<KumaCommandResult>
   addMonitorTag: (monitorID: number, tagName: string, color?: string) => Promise<KumaCommandResult>
+  deleteMonitorTag: (monitorID: number, tagID: number, value?: string | null) => Promise<KumaCommandResult>
+  replaceMonitorTag: (monitor: KumaMonitor, oldTagName: string, newTagName: string, color?: string) => Promise<KumaCommandResult>
   disconnect: () => void
 }
 
@@ -92,6 +95,22 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
       if (!tag?.id) return { ok: false, msg: `Failed to create tag ${tagName}` }
 
       return emitWithCallback(socket, "addMonitorTag", tag.id, monitorID, null)
+    },
+    deleteMonitorTag: (monitorID, tagID, value = null) => emitWithCallback(socket, "deleteMonitorTag", tagID, monitorID, value),
+    replaceMonitorTag: async (monitor, oldTagName, newTagName, color = "#2563eb") => {
+      const oldTag = monitor.tags?.find((tag) => tag.name === oldTagName)
+      if (oldTag?.tag_id) {
+        const removed = await emitWithCallback(socket, "deleteMonitorTag", oldTag.tag_id, monitor.id, oldTag.value ?? null)
+        if (!removed.ok) return removed
+      }
+
+      const tagsResult = await emitWithCallback(socket, "getTags")
+      if (!tagsResult.ok) return { ok: false, msg: tagsResult.msg ?? "Failed to load tags" }
+      const existingTag = tagsResult.tags?.find((tag) => tag.name === newTagName)
+      const tag = existingTag ?? (await emitWithCallback(socket, "addTag", { name: newTagName, color })).tag
+      if (!tag?.id) return { ok: false, msg: `Failed to create tag ${newTagName}` }
+
+      return emitWithCallback(socket, "addMonitorTag", tag.id, monitor.id, null)
     },
     disconnect: () => socket.disconnect(),
   }

@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react"
 
 import { AppHeader } from "@/components/layout/AppHeader"
+import { AppFooter } from "@/components/layout/AppFooter"
 import { StatusCard } from "@/components/layout/StatusCard"
 import { AuthFlow } from "@/features/auth/components/AuthFlow"
 import { DashboardPage } from "@/features/dashboard/components/DashboardPage"
@@ -242,6 +243,42 @@ export default function App() {
     }
   }
 
+  async function renameMonitorTag(oldTag: string, newTag: string) {
+    const record = monitorRecords.find((entry) => entry.tag === oldTag)
+    if (!record) return
+
+    setStatusMessage(`Renaming ${oldTag}...`)
+    setErrorMessage(null)
+
+    try {
+      for (const instance of connectedInstances) {
+        const monitor = record.monitorsByInstance[instance.config.id]
+        if (!monitor) continue
+
+        const response = await clientsRef.current[instance.config.id].replaceMonitorTag(monitor, oldTag, newTag)
+        if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "tag rename failed"}`)
+      }
+
+      setConnectedInstances((current) => current.map((instance) => ({
+        ...instance,
+        monitors: instance.monitors.map((monitor) => {
+          const target = record.monitorsByInstance[instance.config.id]
+          if (!target || monitor.id !== target.id) return monitor
+
+          return {
+            ...monitor,
+            tags: [...(monitor.tags ?? []).filter((tag) => tag.name !== oldTag), { name: newTag, value: null, color: "#2563eb" }],
+          }
+        }),
+      })))
+      setStatusMessage(`Renamed ${oldTag} to ${newTag}.`)
+      navigate(`/monitors/${encodeURIComponent(newTag.replace(/^monitor:/, ""))}`)
+      await refreshMonitors()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Tag rename failed")
+    }
+  }
+
   function logout() {
     disconnectAll()
     clearTokens()
@@ -273,8 +310,8 @@ export default function App() {
         <AppHeader sessionState={sessionState} onRefresh={refreshMonitors} onLogout={logout} />
         {(statusMessage || errorMessage) && (
           <div className={`${alertWidthClass} grid gap-3`}>
-            {statusMessage && <StatusCard message={statusMessage} tone={statusTone} />}
-            {errorMessage && <StatusCard message={errorMessage} tone="error" />}
+            {statusMessage && <StatusCard message={statusMessage} tone={statusTone} onDismiss={() => setStatusMessage(null)} />}
+            {errorMessage && <StatusCard message={errorMessage} tone="error" onDismiss={() => setErrorMessage(null)} />}
           </div>
         )}
         {sessionState !== "authenticated" ? (
@@ -287,7 +324,7 @@ export default function App() {
             onPasswordLogin={authenticateWithPassword}
           />
         ) : route.startsWith("/monitors/") ? (
-          <MonitorPage route={route} connectedInstances={connectedInstances} monitorRecords={monitorRecords} onBack={() => navigate("/dashboard")} onNavigate={navigate} onSave={saveMonitorDetails} />
+          <MonitorPage route={route} connectedInstances={connectedInstances} monitorRecords={monitorRecords} onBack={() => navigate("/dashboard")} onNavigate={navigate} onSave={saveMonitorDetails} onRenameTag={renameMonitorTag} />
         ) : (
           <DashboardPage
             connectedInstances={connectedInstances}
@@ -300,6 +337,7 @@ export default function App() {
             onNavigate={navigate}
           />
         )}
+        <AppFooter />
       </div>
     </main>
   )

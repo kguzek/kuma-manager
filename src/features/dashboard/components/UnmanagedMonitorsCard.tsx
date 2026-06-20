@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Tags } from "lucide-react"
+import { PartyPopper, Tags } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { UnmanagedMonitorRow } from "@/features/dashboard/components/UnmanagedMonitorRow"
@@ -42,7 +42,12 @@ export function UnmanagedMonitorsCard({ unmanagedMonitors, onApplySuggestedTag }
             />
           )
         })}
-        {unmanagedMonitors.length === 0 && <p className="text-sm text-muted-foreground">Every loaded monitor has a sync tag.</p>}
+        {unmanagedMonitors.length === 0 && (
+          <div className="flex items-center gap-3 rounded-2xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+            <PartyPopper className="size-5 text-emerald-300" />
+            <span>Hooray! All monitors are in sync.</span>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
