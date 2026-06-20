@@ -1,2 +1,5 @@
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@types/node@22.20.0'
+  - react-hook-form@7.80.0

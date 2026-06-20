@@ -1,6 +1,6 @@
 version: 2
 updates:
-  - package-ecosystem: "pnpm"
+  - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "daily"
@@ -12,7 +12,9 @@ updates:
           - "version-update:semver-major"
 
     groups:
-      payload:
+      react:
         patterns:
-          - "payload"
-          - "@payloadcms/*"
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
