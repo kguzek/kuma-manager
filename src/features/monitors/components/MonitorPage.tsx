@@ -1,19 +1,19 @@
 import { useState } from "react"
 import { useForm } from "react-hook-form"
-import { ArrowLeft, Pencil, Save, Tags, X } from "lucide-react"
+import { ArrowLeft, Pencil, Save, Search, Tags, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { RouteLink } from "@/components/navigation/RouteLink"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { CollapsibleSection } from "@/components/ui/collapsible-section"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Switch } from "@/components/ui/switch"
 import { SettingsDiff } from "@/features/monitors/components/SettingsDiff"
 import { diffMonitorRecord } from "@/features/monitors/utils/monitor-sync"
-import { getFieldGroupsForMonitor } from "@/features/monitors/utils/settings-groups"
+import { getFieldGroupLabel, getFieldGroupsForMonitor, getFieldLabel } from "@/features/monitors/utils/settings-groups"
 import { getMonitorSettingDiffs, getMonitorSettingFields } from "@/features/monitors/utils/settings-diff"
 import { getTagSuffix } from "@/lib/monitor-tags"
 import type { AppRoute, ConnectedKumaInstance, MonitorDetailsValues, MonitorSyncRecord } from "@/types"
@@ -64,17 +64,66 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
   }
 
   const settingDiffs = getMonitorSettingDiffs(record, connectedInstances)
+  const diffFieldSet = new Set(settingDiffs.map((d) => d.field))
   const structuralDiff = diffMonitorRecord(record, connectedInstances)
   const pendingTag = `monitor:${tagSuffixInput.trim()}`
+  const defaultOpenLabels = groups.filter((g) => g.defaultOpen).map((g) => g.label)
+  const [accordionValues, setAccordionValues] = useState<string[]>(defaultOpenLabels)
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const isReadOnlyField = (field: string) => {
+    const v = firstMonitor![field]
+    return typeof v === "object" && v !== null
+  }
+
+  const matchesSearch = (field: string) => {
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase()
+    return field.toLowerCase().includes(q) || getFieldLabel(field).toLowerCase().includes(q)
+  }
+
+  const sortedFields = (fields: string[]) => {
+    const editable = fields.filter((f) => !isReadOnlyField(f) && matchesSearch(f))
+    const readonly = fields.filter((f) => isReadOnlyField(f) && matchesSearch(f))
+    return [...editable, ...readonly]
+  }
+
+  const filteredGroups = groups.map((g) => ({ ...g, actualFields: sortedFields(g.actualFields) })).filter((g) => g.actualFields.length > 0)
+  const filteredUnlisted = sortedFields(unlistedFields)
+
+  function scrollToField(field: string) {
+    const el = document.getElementById(`monitor-${field}`)
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" })
+      el.closest(".rounded-2xl")?.classList.add("ring-2", "ring-ring", "ring-offset-2", "ring-offset-background")
+      setTimeout(() => {
+        el.closest(".rounded-2xl")?.classList.remove("ring-2", "ring-ring", "ring-offset-2", "ring-offset-background")
+      }, 2000)
+    }
+  }
+
+  function handleShowField(field: string) {
+    const groupLabel = getFieldGroupLabel(field) ?? "Unlisted settings"
+    setAccordionValues((current) => {
+      if (current.includes(groupLabel)) {
+        requestAnimationFrame(() => scrollToField(field))
+        return current
+      }
+      requestAnimationFrame(() => requestAnimationFrame(() => scrollToField(field)))
+      return [...current, groupLabel]
+    })
+  }
 
   function renderField(field: string) {
     const value = firstMonitor![field]
+    const label = getFieldLabel(field)
+    const isDiff = diffFieldSet.has(field)
 
     if (typeof value === "boolean") {
       return (
         <div key={field} className="flex items-center justify-between rounded-lg bg-background/40 px-3 py-2">
           <label className="text-sm" htmlFor={`monitor-${field}`}>
-            {field}
+            {label}
           </label>
           <Switch id={`monitor-${field}`} checked={!!form.watch(field)} onCheckedChange={(checked) => form.setValue(field, checked)} />
         </div>
@@ -84,8 +133,13 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
     if (typeof value === "number") {
       return (
         <Field key={field}>
-          <FieldLabel htmlFor={`monitor-${field}`}>{field}</FieldLabel>
-          <Input id={`monitor-${field}`} type="number" {...form.register(field, { valueAsNumber: true })} />
+          <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
+          <Input
+            id={`monitor-${field}`}
+            type="number"
+            className={isDiff ? "border-yellow-500" : ""}
+            {...form.register(field, { valueAsNumber: true })}
+          />
         </Field>
       )
     }
@@ -93,16 +147,22 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
     if (typeof value === "object" && value !== null) {
       return (
         <Field key={field} className="md:col-span-2">
-          <FieldLabel htmlFor={`monitor-${field}`}>{field}</FieldLabel>
-          <Input id={`monitor-${field}`} value={JSON.stringify(value)} readOnly className="text-muted-foreground" />
+          <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
+          <Input
+            id={`monitor-${field}`}
+            value={JSON.stringify(value)}
+            readOnly
+            tabIndex={-1}
+            className="cursor-not-allowed text-muted-foreground pointer-events-none"
+          />
         </Field>
       )
     }
 
     return (
       <Field key={field}>
-        <FieldLabel htmlFor={`monitor-${field}`}>{field}</FieldLabel>
-        <Input id={`monitor-${field}`} {...form.register(field)} />
+        <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
+        <Input id={`monitor-${field}`} className={isDiff ? "border-yellow-500" : ""} {...form.register(field)} />
       </Field>
     )
   }
@@ -166,7 +226,7 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
         )}
         <div className="grid gap-3">
           <div className="text-sm font-medium">Setting diff</div>
-          <SettingsDiff diffs={settingDiffs} emptyMessage="All compared settings match across instances." />
+          <SettingsDiff diffs={settingDiffs} emptyMessage="All compared settings match across instances." onShowField={handleShowField} />
         </div>
         <div className="rounded-2xl border bg-muted/20 p-4">
           <div className="mb-3 text-sm font-medium">Instances</div>
@@ -186,20 +246,32 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
           </div>
         </div>
         <form className="grid gap-5" onSubmit={form.handleSubmit((values) => onSave(tag, values))}>
-          {groups.map((group) => (
-            <CollapsibleSection key={group.label} label={group.label} defaultOpen={group.defaultOpen}>
-              {group.actualFields.some((field) => typeof firstMonitor[field] === "boolean") ? (
-                <div className="grid gap-3 md:grid-cols-2">{group.actualFields.map((field) => renderField(field))}</div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">{group.actualFields.map((field) => renderField(field))}</div>
-              )}
-            </CollapsibleSection>
-          ))}
-          {unlistedFields.length > 0 && (
-            <CollapsibleSection label="Unlisted settings" defaultOpen={false}>
-              <div className="grid gap-4 md:grid-cols-2">{unlistedFields.map((field) => renderField(field))}</div>
-            </CollapsibleSection>
-          )}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Search settings…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+          </div>
+          <Accordion type="multiple" value={accordionValues} onValueChange={setAccordionValues} className="grid gap-3">
+            {filteredGroups.map((group) => (
+              <AccordionItem key={group.label} value={group.label} className="rounded-2xl border bg-muted/20">
+                <AccordionTrigger>{group.label}</AccordionTrigger>
+                <AccordionContent>
+                  {group.actualFields.some((field) => typeof firstMonitor[field] === "boolean") ? (
+                    <div className="grid gap-3 md:grid-cols-2">{group.actualFields.map((field) => renderField(field))}</div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2">{group.actualFields.map((field) => renderField(field))}</div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+            {filteredUnlisted.length > 0 && (
+              <AccordionItem value="Unlisted settings" className="rounded-2xl border bg-muted/20">
+                <AccordionTrigger>Unlisted settings</AccordionTrigger>
+                <AccordionContent>
+                  <div className="grid gap-4 md:grid-cols-2">{filteredUnlisted.map((field) => renderField(field))}</div>
+                </AccordionContent>
+              </AccordionItem>
+            )}
+          </Accordion>
           <div className="flex justify-end">
             <Button type="submit">
               <Save /> Save
