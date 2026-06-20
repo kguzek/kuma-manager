@@ -9,12 +9,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { createKumaApiClient, type KumaApiClient } from "@/lib/kuma-api"
 import { clearTokens, loadInstances, loadTokens, saveInstances, saveTokens } from "@/lib/storage"
 import type { ConnectedKumaInstance, KumaInstanceConfig, KumaMonitor, StoredKumaToken } from "@/lib/types"
 import type { MonitorDifference } from "@/lib/types"
-import { buildMonitorRecords, diffMonitorRecord, getSuggestedMonitorSyncTag, getUnmanagedMonitors, prepareMonitorForCreate, prepareMonitorForEdit } from "@/lib/monitor-sync"
+import { buildMonitorRecords, diffMonitorRecord, getMonitorGroupViews, getSuggestedMonitorSyncTag, getUnmanagedMonitors, prepareMonitorForCreate, prepareMonitorForEdit } from "@/lib/monitor-sync"
 
 const instanceSchema = z.object({
   instances: z
@@ -28,20 +29,23 @@ const instanceSchema = z.object({
     .min(1, "Add at least one Kuma instance"),
 })
 
-const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  password: z.string().min(1, "Password is required"),
-})
-
 type InstanceFormValues = z.infer<typeof instanceSchema>
-type LoginFormValues = z.infer<typeof loginSchema>
+type LoginCredentials = Record<string, { username: string; password: string }>
+type LoginFormValues = {
+  separate: boolean
+  username: string
+  password: string
+  credentials: LoginCredentials
+}
 type SessionState = "configuring" | "authenticating" | "authenticated"
+type AppRoute = "/instances" | "/login" | "/dashboard"
 
 export default function App() {
   const [instances, setInstances] = useState<KumaInstanceConfig[]>(() => loadInstances())
   const [tokens, setTokens] = useState<Record<string, StoredKumaToken>>(() => loadTokens())
   const [connectedInstances, setConnectedInstances] = useState<ConnectedKumaInstance[]>([])
   const [sessionState, setSessionState] = useState<SessionState>("configuring")
+  const [route, setRoute] = useState<AppRoute>(() => getInitialRoute())
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const clientsRef = useRef<Record<string, KumaApiClient>>({})
@@ -57,6 +61,7 @@ export default function App() {
     [connectedInstances, monitorRecords],
   )
   const unmanagedMonitors = useMemo(() => getUnmanagedMonitors(connectedInstances), [connectedInstances])
+  const monitorGroups = useMemo(() => getMonitorGroupViews(connectedInstances), [connectedInstances])
 
   useEffect(() => {
     saveInstances(instances)
@@ -66,7 +71,18 @@ export default function App() {
     saveTokens(tokens)
   }, [tokens])
 
-  async function authenticateWithPassword(credentials: LoginFormValues) {
+  useEffect(() => {
+    const onPopState = () => setRoute(getInitialRoute())
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [])
+
+  function navigate(nextRoute: AppRoute) {
+    window.history.pushState(null, "", nextRoute)
+    setRoute(nextRoute)
+  }
+
+  async function authenticateWithPassword(credentialsByInstance: LoginCredentials) {
     setSessionState("authenticating")
     setErrorMessage(null)
     setStatusMessage("Logging in to every configured Kuma instance...")
@@ -74,6 +90,8 @@ export default function App() {
     try {
       const connected = await Promise.all(
         configuredInstances.map(async (instance) => {
+          const credentials = credentialsByInstance[instance.id]
+          if (!credentials) throw new Error(`${instance.name}: missing credentials`)
           const client = createKumaApiClient(instance)
           await client.connect()
           const login = await client.login(credentials)
@@ -95,6 +113,7 @@ export default function App() {
         setConnectedInstances(connected)
         setSessionState("authenticated")
         setStatusMessage("Authenticated against every instance.")
+        navigate("/dashboard")
       })
     } catch (error) {
       disconnectAll()
@@ -127,12 +146,15 @@ export default function App() {
       )
 
       startTransition(() => {
-        setConnectedInstances(connected)
-        setSessionState("authenticated")
-        setStatusMessage("Restored saved sessions.")
+      setConnectedInstances(connected)
+      setSessionState("authenticated")
+      setStatusMessage("Restored saved sessions.")
+      navigate("/dashboard")
       })
     } catch (error) {
       disconnectAll()
+      clearTokens()
+      setTokens({})
       setSessionState("configuring")
       setErrorMessage(error instanceof Error ? error.message : "Saved token login failed")
     }
@@ -186,10 +208,7 @@ export default function App() {
     setErrorMessage(null)
 
     try {
-      const response = await client.editMonitor({
-        ...monitor,
-        tags: [...(monitor.tags ?? []), { name: tag, value: null, color: "#2563eb" }],
-      })
+      const response = await client.addMonitorTag(monitor.id, tag)
       if (!response.ok) throw new Error(response.msg ?? "Failed to apply tag")
       await refreshMonitors()
     } catch (error) {
@@ -204,6 +223,7 @@ export default function App() {
     setConnectedInstances([])
     setSessionState("configuring")
     setStatusMessage("Signed out and cleared saved Kuma tokens.")
+    navigate("/instances")
   }
 
   function disconnectAll() {
@@ -244,10 +264,12 @@ export default function App() {
 
         {sessionState !== "authenticated" ? (
           <AuthWall
+            route={route === "/dashboard" ? "/instances" : route}
             instances={instances}
             tokens={tokens}
             authenticating={sessionState === "authenticating"}
             onInstancesChange={setInstances}
+            onNavigate={navigate}
             onPasswordLogin={authenticateWithPassword}
             onTokenLogin={authenticateWithSavedTokens}
           />
@@ -257,6 +279,7 @@ export default function App() {
             differences={differences}
             monitorRecords={monitorRecords}
             unmanagedMonitors={unmanagedMonitors}
+            monitorGroups={monitorGroups}
             onSyncFrom={syncFrom}
             onApplySuggestedTag={applySuggestedTag}
           />
@@ -267,27 +290,39 @@ export default function App() {
 }
 
 function AuthWall({
+  route,
   instances,
   tokens,
   authenticating,
   onInstancesChange,
+  onNavigate,
   onPasswordLogin,
   onTokenLogin,
 }: {
+  route: "/instances" | "/login"
   instances: KumaInstanceConfig[]
   tokens: Record<string, StoredKumaToken>
   authenticating: boolean
   onInstancesChange: (instances: KumaInstanceConfig[]) => void
-  onPasswordLogin: (credentials: LoginFormValues) => Promise<void>
+  onNavigate: (route: AppRoute) => void
+  onPasswordLogin: (credentials: LoginCredentials) => Promise<void>
   onTokenLogin: () => Promise<void>
 }) {
-  const [step, setStep] = useState<"instances" | "login">("instances")
   const instanceForm = useForm<InstanceFormValues>({ resolver: zodResolver(instanceSchema), defaultValues: { instances } })
-  const loginForm = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema), defaultValues: { username: "", password: "" } })
+  const loginForm = useForm<LoginFormValues>({
+    defaultValues: {
+      separate: false,
+      username: "",
+      password: "",
+      credentials: Object.fromEntries(instances.map((instance) => [instance.id, { username: "", password: "" }])),
+    },
+  })
   const { fields, append, remove } = useFieldArray({ control: instanceForm.control, name: "instances" })
   const watchedInstances = instanceForm.watch("instances")
+  const separateCredentials = loginForm.watch("separate")
   const activeInstances = watchedInstances.filter((instance) => instance.url.trim())
   const hasSavedTokens = activeInstances.length > 0 && activeInstances.every((instance) => tokens[instance.id]?.token)
+  const [attemptedSavedLogin, setAttemptedSavedLogin] = useState(false)
 
   useEffect(() => {
     const subscription = instanceForm.watch((value) => {
@@ -309,18 +344,39 @@ function AuthWall({
 
   const goToLogin = instanceForm.handleSubmit((values) => {
     onInstancesChange(values.instances)
-    setStep("login")
+    onNavigate("/login")
   })
+
+  useEffect(() => {
+    if (route !== "/login" || !hasSavedTokens || attemptedSavedLogin || authenticating) return
+    setAttemptedSavedLogin(true)
+    void onTokenLogin()
+  }, [attemptedSavedLogin, authenticating, hasSavedTokens, onTokenLogin, route])
+
+  function submitLogin(values: LoginFormValues) {
+    const credentials = values.separate
+      ? Object.fromEntries(activeInstances.map((instance) => [instance.id, values.credentials[instance.id] ?? { username: "", password: "" }]))
+      : Object.fromEntries(activeInstances.map((instance) => [instance.id, { username: values.username, password: values.password }]))
+
+    const missing = Object.entries(credentials).find(([, credential]) => !credential.username.trim() || !credential.password)
+    if (missing) {
+      const instance = activeInstances.find((entry) => entry.id === missing[0])
+      loginForm.setError("root", { message: `Enter credentials for ${instance?.name ?? "every instance"}.` })
+      return
+    }
+
+    void onPasswordLogin(credentials)
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl">
       <div className="mb-5 flex items-center justify-center gap-3 text-sm text-muted-foreground">
-        <StepPill active={step === "instances"} icon={Server} label="Instances" />
+        <StepPill active={route === "/instances"} icon={Server} label="Instances" />
         <ChevronRight className="size-4" />
-        <StepPill active={step === "login"} icon={KeyRound} label="Login" />
+        <StepPill active={route === "/login"} icon={KeyRound} label="Login" />
       </div>
 
-      {step === "instances" ? (
+      {route === "/instances" ? (
         <Card className="setup-panel">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Add Kuma instances</CardTitle>
@@ -408,27 +464,62 @@ function AuthWall({
             <CardDescription>{activeInstances.length} instance{activeInstances.length === 1 ? "" : "s"} configured</CardDescription>
           </CardHeader>
           <CardContent>
-            <form className="flex flex-col gap-5" onSubmit={loginForm.handleSubmit(onPasswordLogin)}>
-              <Field data-invalid={!!loginForm.formState.errors.username}>
-                <FieldLabel htmlFor="username">Username</FieldLabel>
-                <Input id="username" autoComplete="username" {...loginForm.register("username")} />
-                <FieldError errors={[loginForm.formState.errors.username]} />
+            <form className="flex flex-col gap-5" onSubmit={loginForm.handleSubmit(submitLogin)}>
+              {hasSavedTokens && authenticating && (
+                <div className="flex items-center gap-2 rounded-xl border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  <RefreshCw className="size-4 animate-spin" /> Restoring saved login...
+                </div>
+              )}
+
+              <Field orientation="horizontal" className="items-center justify-between rounded-xl border bg-muted/30 p-3">
+                <div>
+                  <FieldLabel htmlFor="separate-credentials">Separate credentials</FieldLabel>
+                  <FieldDescription>Use different login details per instance.</FieldDescription>
+                </div>
+                <Switch
+                  id="separate-credentials"
+                  checked={separateCredentials}
+                  onCheckedChange={(checked) => loginForm.setValue("separate", checked, { shouldDirty: true })}
+                />
               </Field>
-              <Field data-invalid={!!loginForm.formState.errors.password}>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
-                <Input id="password" type="password" autoComplete="current-password" {...loginForm.register("password")} />
-                <FieldDescription>Must work on every instance.</FieldDescription>
-                <FieldError errors={[loginForm.formState.errors.password]} />
-              </Field>
+
+              {separateCredentials ? (
+                <div className="grid gap-4">
+                  {activeInstances.map((instance) => (
+                    <div key={instance.id} className="grid gap-3 rounded-xl border p-3">
+                      <div className="flex items-center gap-2 text-sm font-medium"><Server className="size-4" /> {instance.name}</div>
+                      <Field>
+                        <FieldLabel htmlFor={`${instance.id}-username`}>Username</FieldLabel>
+                        <Input id={`${instance.id}-username`} autoComplete="username" {...loginForm.register(`credentials.${instance.id}.username`)} />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`${instance.id}-password`}>Password</FieldLabel>
+                        <Input id={`${instance.id}-password`} type="password" autoComplete="current-password" {...loginForm.register(`credentials.${instance.id}.password`)} />
+                      </Field>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <Field>
+                    <FieldLabel htmlFor="username">Username</FieldLabel>
+                    <Input id="username" autoComplete="username" {...loginForm.register("username")} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="password">Password</FieldLabel>
+                    <Input id="password" type="password" autoComplete="current-password" {...loginForm.register("password")} />
+                    <FieldDescription>Used for every instance.</FieldDescription>
+                  </Field>
+                </>
+              )}
+
+              <FieldError errors={[loginForm.formState.errors.root]} />
               <div className="grid gap-2">
                 <Button type="submit" size="lg" disabled={authenticating}>
                   {authenticating ? <RefreshCw className="animate-spin" /> : <ShieldCheck />} Sign in
                 </Button>
-                <Button type="button" variant="outline" disabled={authenticating || !hasSavedTokens} onClick={onTokenLogin}>
-                  <KeyRound /> Use saved login
-                </Button>
               </div>
-              <Button type="button" variant="ghost" onClick={() => setStep("instances")}>
+              <Button type="button" variant="ghost" onClick={() => onNavigate("/instances")}>
                 <ArrowLeft /> Back
               </Button>
             </form>
@@ -453,6 +544,7 @@ function Dashboard({
   differences,
   monitorRecords,
   unmanagedMonitors,
+  monitorGroups,
   onSyncFrom,
   onApplySuggestedTag,
 }: {
@@ -460,9 +552,12 @@ function Dashboard({
   differences: MonitorDifference[]
   monitorRecords: ReturnType<typeof buildMonitorRecords>
   unmanagedMonitors: ReturnType<typeof getUnmanagedMonitors>
+  monitorGroups: ReturnType<typeof getMonitorGroupViews>
   onSyncFrom: (sourceInstanceId: string, tag: string) => Promise<void>
   onApplySuggestedTag: (instanceId: string, monitor: KumaMonitor, tag: string) => Promise<void>
 }) {
+  const [customTags, setCustomTags] = useState<Record<string, string>>({})
+
   return (
     <div className="grid gap-6">
       <section className="grid gap-4 md:grid-cols-3">
@@ -525,6 +620,33 @@ function Dashboard({
 
       <Card>
         <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Server className="size-5" /> Monitor groups</CardTitle>
+          <CardDescription>Groups are containers in Kuma, not syncable monitor endpoints.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {monitorGroups.map(({ instance, group, children }) => (
+            <div key={`${instance.config.id}-${group.id}`} className="rounded-2xl border bg-muted/20 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 font-medium"><Server className="size-4 text-muted-foreground" /> {group.name}</div>
+                <Badge variant="outline">{instance.config.name}</Badge>
+              </div>
+              <div className="mt-3 grid gap-2 border-l pl-4">
+                {children.map((monitor) => (
+                  <div key={monitor.id} className="flex items-center justify-between gap-3 rounded-lg bg-background/40 px-3 py-2 text-sm">
+                    <span>{monitor.name}</span>
+                    <span className="text-muted-foreground">{monitor.url ?? monitor.hostname ?? monitor.type}</span>
+                  </div>
+                ))}
+                {children.length === 0 && <p className="text-sm text-muted-foreground">No child monitors.</p>}
+              </div>
+            </div>
+          ))}
+          {monitorGroups.length === 0 && <p className="text-sm text-muted-foreground">No monitor groups found.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2"><Tags className="size-5" /> Unmanaged monitors</CardTitle>
           <CardDescription>These monitors do not have a <code>monitor:</code> tag. Suggested tags are initially based on the URL or hostname domain.</CardDescription>
         </CardHeader>
@@ -536,8 +658,23 @@ function Dashboard({
                 <div className="text-sm text-muted-foreground">{instance.config.name} · {monitor.url ?? monitor.hostname ?? "No URL/hostname"}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="font-mono">{suggestedTag ?? "No suggestion"}</Badge>
-                <Button size="sm" variant="outline" disabled={!suggestedTag} onClick={() => suggestedTag && onApplySuggestedTag(instance.config.id, monitor, suggestedTag)}>Apply tag</Button>
+                <Input
+                  className="w-72 font-mono text-xs"
+                  placeholder="monitor:example.com"
+                  value={customTags[`${instance.config.id}-${monitor.id}`] ?? suggestedTag ?? ""}
+                  onChange={(event) => setCustomTags((current) => ({
+                    ...current,
+                    [`${instance.config.id}-${monitor.id}`]: event.target.value,
+                  }))}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!getPendingTag(customTags[`${instance.config.id}-${monitor.id}`], suggestedTag).startsWith("monitor:")}
+                  onClick={() => onApplySuggestedTag(instance.config.id, monitor, getPendingTag(customTags[`${instance.config.id}-${monitor.id}`], suggestedTag))}
+                >
+                  Apply tag
+                </Button>
               </div>
             </div>
           ))}
@@ -562,6 +699,12 @@ function MetricCard({ title, value, description }: { title: string; value: numbe
 
 function getPendingTag(customTag: string | undefined, suggestedTag: string | null) {
   return (customTag ?? suggestedTag ?? "").trim()
+}
+
+function getInitialRoute(): AppRoute {
+  if (window.location.pathname === "/login") return "/login"
+  if (window.location.pathname === "/dashboard") return "/dashboard"
+  return "/instances"
 }
 
 function StatusCard({ message, tone }: { message: string; tone: "success" | "error" }) {

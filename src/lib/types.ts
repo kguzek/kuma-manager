@@ -10,6 +10,7 @@ export type StoredKumaToken = {
 }
 
 export type KumaTag = {
+  id?: number
   tag_id?: number
   monitor_id?: number
   value: string | null
@@ -30,6 +31,7 @@ export type KumaMonitor = {
   resendInterval?: number
   maxretries?: number
   active?: boolean
+  parent?: number | null
   tags?: KumaTag[]
   notificationIDList?: Record<string, boolean>
   accepted_statuscodes_json?: string
@@ -49,6 +51,12 @@ export type KumaCommandResult = {
   msg?: string
   monitorID?: number
   [key: string]: unknown
+}
+
+export type KumaTagListResult = {
+  ok: boolean
+  msg?: string
+  tags?: Array<{ id: number; name: string; color: string }>
 }
 
 export type ConnectedKumaInstance = {

@@ -5,6 +5,7 @@ import type {
   KumaInstanceConfig,
   KumaLoginResult,
   KumaMonitor,
+  KumaTagListResult,
 } from "@/lib/types"
 
 type KumaServerEvents = {
@@ -26,6 +27,9 @@ type KumaClientEvents = {
   pauseMonitor: (monitorID: number, callback: (response: KumaCommandResult) => void) => void
   resumeMonitor: (monitorID: number, callback: (response: KumaCommandResult) => void) => void
   getMonitor: (monitorID: number, callback: (response: { ok: boolean; monitor?: KumaMonitor; msg?: string }) => void) => void
+  getTags: (callback: (response: KumaTagListResult) => void) => void
+  addTag: (tag: { name: string; color: string }, callback: (response: KumaCommandResult & { tag?: { id: number; name: string; color: string } }) => void) => void
+  addMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
 }
 
 export type KumaApiClient = {
@@ -37,6 +41,7 @@ export type KumaApiClient = {
   addMonitor: (monitor: Partial<KumaMonitor>) => Promise<KumaCommandResult>
   editMonitor: (monitor: KumaMonitor) => Promise<KumaCommandResult>
   deleteMonitor: (monitorID: number) => Promise<KumaCommandResult>
+  addMonitorTag: (monitorID: number, tagName: string, color?: string) => Promise<KumaCommandResult>
   disconnect: () => void
 }
 
@@ -82,6 +87,16 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
     addMonitor: (monitor) => emitWithCallback(socket, "add", stripRuntimeMonitorFields(monitor)),
     editMonitor: (monitor) => emitWithCallback(socket, "editMonitor", stripRuntimeMonitorFields(monitor) as KumaMonitor),
     deleteMonitor: (monitorID) => emitWithCallback(socket, "deleteMonitor", monitorID),
+    addMonitorTag: async (monitorID, tagName, color = "#2563eb") => {
+      const tagsResult = await emitWithCallback(socket, "getTags")
+      if (!tagsResult.ok) return { ok: false, msg: tagsResult.msg ?? "Failed to load tags" }
+
+      const existingTag = tagsResult.tags?.find((tag) => tag.name === tagName)
+      const tag = existingTag ?? (await emitWithCallback(socket, "addTag", { name: tagName, color })).tag
+      if (!tag?.id) return { ok: false, msg: `Failed to create tag ${tagName}` }
+
+      return emitWithCallback(socket, "addMonitorTag", tag.id, monitorID, null)
+    },
     disconnect: () => socket.disconnect(),
   }
 }

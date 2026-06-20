@@ -64,9 +64,20 @@ export function buildMonitorRecords(instances: ConnectedKumaInstance[]): Monitor
 export function getUnmanagedMonitors(instances: ConnectedKumaInstance[]) {
   return instances.flatMap((instance) =>
     instance.monitors
-      .filter((monitor) => !getMonitorSyncTag(monitor))
+      .filter((monitor) => monitor.type !== "group" && !getMonitorSyncTag(monitor))
       .map((monitor) => ({ instance, monitor, suggestedTag: getSuggestedMonitorSyncTag(monitor) })),
   )
+}
+
+export function getMonitorGroupViews(instances: ConnectedKumaInstance[]) {
+  return instances.flatMap((instance) => {
+    const groups = instance.monitors.filter((monitor) => monitor.type === "group")
+    return groups.map((group) => ({
+      instance,
+      group,
+      children: instance.monitors.filter((monitor) => monitor.parent === group.id && monitor.type !== "group"),
+    }))
+  })
 }
 
 export function diffMonitorRecord(record: MonitorSyncRecord, instances: ConnectedKumaInstance[]): MonitorDifference | null {
