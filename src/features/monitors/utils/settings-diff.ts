@@ -1,4 +1,5 @@
 import type { ConnectedKumaInstance, MonitorSyncRecord } from "@/types"
+import { DIFF_BYPASS_RULES } from "../constants/diff-bypass-rules"
 
 export type SettingDiff = {
   field: string
@@ -52,7 +53,22 @@ export function getMonitorSettingDiffs(record: MonitorSyncRecord, instances: Con
       }
     })
 
-    if (new Set(values.map((entry) => entry.value)).size <= 1) return []
+    const getUniqueValueCount = (values: { value: string }[]) => new Set(values.map((entry) => entry.value)).size
+
+    if (getUniqueValueCount(values) <= 1) return []
+    for (const bypassRule of DIFF_BYPASS_RULES) {
+      if (!bypassRule.ignoreDiffFields.includes(field)) continue
+      const instanceId = instances.find((instance) => instance.config.name === bypassRule.instanceName)?.config.id
+      if (instanceId == null) continue
+      const monitor = record.monitorsByInstance[instanceId]
+      if (monitor == null) continue
+      console.log({ field, bypassRule, values, monitor })
+      if (monitor.tags == null || !monitor.tags.some((tag) => tag.name === bypassRule.monitorMatchTag)) continue
+      const uniqueValuesExcludingBypass = getUniqueValueCount(values.filter((entry) => entry.instanceName !== bypassRule.instanceName))
+
+      if (uniqueValuesExcludingBypass > 1) continue
+      return []
+    }
     return { field, values }
   })
 }

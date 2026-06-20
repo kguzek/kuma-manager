@@ -1,9 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ReactNode } from "react"
 
 type MetricCardProps = {
   title: string
   value: number
-  description: string
+  description: ReactNode
   tone?: "neutral" | "success" | "error"
 }
 

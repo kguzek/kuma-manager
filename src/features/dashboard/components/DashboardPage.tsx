@@ -37,11 +37,23 @@ export function DashboardPage({
     <div className="grid gap-6">
       <section className="grid gap-4 md:grid-cols-3">
         <MetricCard title="Instances" value={connectedInstances.length} description="Authenticated Kuma servers" />
-        <MetricCard title="Managed monitors" value={monitorRecords.length} description="Records with monitor:* tags" />
         <MetricCard
-          title="Diffs"
+          title="Managed monitors"
+          value={monitorRecords.length}
+          description={
+            <>
+              Record{monitorRecords.length === 1 ? "" : "s"} with{" "}
+              <Badge className="font-mono" variant="ghost">
+                monitor:*
+              </Badge>{" "}
+              tags
+            </>
+          }
+        />
+        <MetricCard
+          title="Configuration conflicts"
           value={totalDiffs}
-          description={`${differences.length} monitor · ${statusPageDifferences.length} status page`}
+          description={`${differences.length} monitor diff${differences.length === 1 ? "" : "s"} · ${statusPageDifferences.length} status page diff${statusPageDifferences.length === 1 ? "" : "s"}`}
           tone={totalDiffs === 0 ? "success" : "error"}
         />
       </section>
@@ -52,11 +64,13 @@ export function DashboardPage({
               <Activity className="size-5" /> Monitors
             </CardTitle>
             <CardDescription>
-              {monitorRecords.length} managed monitor{monitorRecords.length !== 1 ? "s" : ""}
+              {monitorRecords.length} managed monitor
+              {monitorRecords.length !== 1 ? "s" : ""}
               {differences.length > 0 && (
                 <span className="ml-2">
                   <Badge variant="destructive">
-                    {differences.length} diff{differences.length !== 1 ? "s" : ""}
+                    {differences.length} diff
+                    {differences.length !== 1 ? "s" : ""}
                   </Badge>
                 </span>
               )}
@@ -76,11 +90,13 @@ export function DashboardPage({
               <FileBarChart className="size-5" /> Status Pages
             </CardTitle>
             <CardDescription>
-              {statusPageRecords.length} status page{statusPageRecords.length !== 1 ? "s" : ""}
+              {statusPageRecords.length} status page
+              {statusPageRecords.length !== 1 ? "s" : ""}
               {statusPageDifferences.length > 0 && (
                 <span className="ml-2">
                   <Badge variant="destructive">
-                    {statusPageDifferences.length} diff{statusPageDifferences.length !== 1 ? "s" : ""}
+                    {statusPageDifferences.length} diff
+                    {statusPageDifferences.length !== 1 ? "s" : ""}
                   </Badge>
                 </span>
               )}

@@ -33,3 +33,9 @@ export type StatusPageSettingDiff = {
 }
 
 export type StatusPageDetailsValues = Record<string, unknown>
+
+export interface DiffBypassRule {
+  instanceName: string
+  monitorMatchTag: string
+  ignoreDiffFields: string[]
+}

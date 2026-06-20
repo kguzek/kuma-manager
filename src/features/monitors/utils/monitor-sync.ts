@@ -1,4 +1,5 @@
 import type { ConnectedKumaInstance, KumaMonitor, MonitorDifference, MonitorSyncRecord } from "@/types"
+import { getMonitorSettingDiffs } from "./settings-diff"
 
 const SYNC_TAG_PREFIX = "monitor:"
 
@@ -72,7 +73,11 @@ export function getUnmanagedMonitors(instances: ConnectedKumaInstance[]) {
   return instances.flatMap((instance) =>
     instance.monitors
       .filter((monitor) => monitor.type !== "group" && !getMonitorSyncTag(monitor))
-      .map((monitor) => ({ instance, monitor, suggestedTag: getSuggestedMonitorSyncTag(monitor) })),
+      .map((monitor) => ({
+        instance,
+        monitor,
+        suggestedTag: getSuggestedMonitorSyncTag(monitor),
+      })),
   )
 }
 
@@ -98,19 +103,13 @@ export function diffMonitorRecord(record: MonitorSyncRecord, instances: Connecte
     }
   }
 
-  const instanceMonitorPairs = instances
-    .map((instance) => ({ instance, monitor: record.monitorsByInstance[instance.config.id] }))
-    .filter((pair): pair is { instance: ConnectedKumaInstance; monitor: KumaMonitor } => Boolean(pair.monitor))
-  const [first, ...rest] = instanceMonitorPairs.map(({ instance, monitor }) => normalizeMonitorForDiff(monitor, instance))
-  const firstJson = stableJson(first)
-  const different = rest.some((m) => stableJson(m) !== firstJson)
-
-  if (!different) return null
+  const settingDiffs = getMonitorSettingDiffs(record, instances)
+  if (settingDiffs.length === 0) return null
 
   return {
     tag: record.tag,
     issue: "different",
-    description: "Configuration differs between instances",
+    description: `Conflicting values for: ${settingDiffs.map((diff) => diff.field).join(", ")}`,
     instances: instances.map((instance) => instance.config.id),
   }
 }
