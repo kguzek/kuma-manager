@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, Braces, FileBarChart, Pencil, Plus, Save, Trash2, X } from "lucide-react"
 import { useForm } from "react-hook-form"
 
@@ -74,16 +74,18 @@ export function StatusPageDetailPage({
   const [accordionValues, setAccordionValues] = useState<string[]>(defaultOpenLabels)
   const [autocompleteField, setAutocompleteField] = useState<string | null>(null)
   const [fullPageData, setFullPageData] = useState<KumaStatusPage | null>(null)
+  const fetchDetailRef = useRef(onFetchStatusPageDetail)
+  fetchDetailRef.current = onFetchStatusPageDetail
 
   useEffect(() => {
     if (!record) return
     const firstInstanceId = Object.keys(record.pagesByInstance)[0]
     if (!firstInstanceId) return
     setFullPageData(null)
-    onFetchStatusPageDetail(slug, firstInstanceId).then((data) => {
+    fetchDetailRef.current(slug, firstInstanceId).then((data) => {
       if (data) setFullPageData(data)
     })
-  }, [slug, record, onFetchStatusPageDetail])
+  }, [slug, record])
 
   if (!record || !firstPage) {
     return (

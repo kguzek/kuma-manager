@@ -129,8 +129,9 @@ export default function App() {
           }
 
           const [monitors, statusPages] = await Promise.all([client.getMonitors(), client.getStatusPages()])
+          const enrichedPages = await enrichInstancePages(statusPages, client)
           clientsRef.current[instance.id] = client
-          return { config: client.instance, token: login.token, monitors, statusPages }
+          return { config: client.instance, token: login.token, monitors, statusPages: enrichedPages }
         }),
       )
 
@@ -171,8 +172,9 @@ export default function App() {
           }
 
           const [monitors, statusPages] = await Promise.all([client.getMonitors(), client.getStatusPages()])
+          const enrichedPages = await enrichInstancePages(statusPages, client)
           clientsRef.current[instance.id] = client
-          return { config: client.instance, token: stored.token, monitors, statusPages }
+          return { config: client.instance, token: stored.token, monitors, statusPages: enrichedPages }
         }),
       )
 
@@ -191,6 +193,17 @@ export default function App() {
     }
   }
 
+  async function enrichInstancePages(pages: KumaStatusPage[], client: KumaApiClient): Promise<KumaStatusPage[]> {
+    const enriched = await Promise.all(
+      pages.map(async (page) => {
+        const slug = page.slug || `page-${page.id}`
+        const detail = await client.getStatusPage(slug)
+        return detail ?? page
+      }),
+    )
+    return enriched
+  }
+
   async function refreshMonitors() {
     setStatusMessage("Refreshing data...")
     setErrorMessage(null)
@@ -198,11 +211,10 @@ export default function App() {
     try {
       const refreshed = await Promise.all(
         connectedInstances.map(async (instance) => {
-          const [monitors, statusPages] = await Promise.all([
-            clientsRef.current[instance.config.id].getMonitors(),
-            clientsRef.current[instance.config.id].getStatusPages(),
-          ])
-          return { ...instance, monitors, statusPages }
+          const client = clientsRef.current[instance.config.id]
+          const [monitors, statusPages] = await Promise.all([client.getMonitors(), client.getStatusPages()])
+          const enrichedPages = await enrichInstancePages(statusPages, client)
+          return { ...instance, monitors, statusPages: enrichedPages }
         }),
       )
       setConnectedInstances(refreshed)
@@ -218,10 +230,12 @@ export default function App() {
 
     try {
       const refreshed = await Promise.all(
-        connectedInstances.map(async (instance) => ({
-          ...instance,
-          statusPages: await clientsRef.current[instance.config.id].getStatusPages(),
-        })),
+        connectedInstances.map(async (instance) => {
+          const client = clientsRef.current[instance.config.id]
+          const statusPages = await client.getStatusPages()
+          const enrichedPages = await enrichInstancePages(statusPages, client)
+          return { ...instance, statusPages: enrichedPages }
+        }),
       )
       setConnectedInstances(refreshed)
       setStatusMessage("Status pages refreshed.")

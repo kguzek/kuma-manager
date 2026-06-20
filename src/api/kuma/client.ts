@@ -161,21 +161,37 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
       return emitWithCallback(socket, "addMonitorTag", tag.id, monitor.id, null)
     },
     getStatusPage: async (slug) => {
+      // Try socket event first (works within Kuma's CORS context like all other calls)
       try {
         const result = await emitWithCallback(socket, "getStatusPage", slug)
         if (result && typeof result === "object") {
           const data = result as Record<string, unknown>
-          const config = data.config as Record<string, unknown> | undefined
-          if (config) {
-            delete data.config
-            return { ...config, ...data } as KumaStatusPage
+          if (data.id) {
+            const config = data.config as Record<string, unknown> | undefined
+            if (config) {
+              delete data.config
+              return { ...config, ...data } as KumaStatusPage
+            }
+            return data as KumaStatusPage
           }
-          return data as KumaStatusPage
         }
       } catch {
-        /* event not supported by this Kuma version */
+        /* fall through to REST fallback */
       }
-      return null
+      // Fall back to REST API if socket event fails
+      try {
+        const response = await fetch(`${normalizedUrl}/api/status-page/${encodeURIComponent(slug)}`)
+        if (!response.ok) return null
+        const data = (await response.json()) as Record<string, unknown>
+        const config = data.config as Record<string, unknown> | undefined
+        if (config) {
+          delete data.config
+          return { ...config, ...data } as KumaStatusPage
+        }
+        return data as KumaStatusPage
+      } catch {
+        return null
+      }
     },
     getStatusPages: async () => {
       if (Object.keys(statusPageList).length > 0) return Object.values(statusPageList)
