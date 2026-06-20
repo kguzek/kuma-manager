@@ -45,10 +45,12 @@ export function DiffTableRowGroup({ groupName, records, connectedInstances, diff
                 return <TableCell key={instance.config.id}>{monitor ? monitor.name : <span className="text-muted-foreground">Missing</span>}</TableCell>
               })}
               <TableCell>
-                {diff || settingDiffs.length > 0 ? (
-                  <Button variant="link" className="h-auto p-0" asChild>
+                {settingDiffs.length > 0 ? (
+                  <Button variant="destructive" className="h-auto px-2 py-1 text-xs" asChild>
                     <RouteLink href={`/monitors/${encodeURIComponent(stripMonitorPrefix(record.tag))}`} onNavigate={onNavigate}>View diff</RouteLink>
                   </Button>
+                ) : diff ? (
+                  <Badge variant="destructive">{diff.description}</Badge>
                 ) : <Badge variant="secondary"><CheckCircle2 /> In sync</Badge>}
               </TableCell>
               <TableCell className="text-right">

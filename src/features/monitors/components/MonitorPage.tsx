@@ -10,8 +10,9 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { SettingsDiff } from "@/features/monitors/components/SettingsDiff"
-import { getTagSuffix } from "@/lib/monitor-tags"
+import { diffMonitorRecord } from "@/features/monitors/utils/monitor-sync"
 import { getMonitorSettingDiffs } from "@/features/monitors/utils/settings-diff"
+import { getTagSuffix } from "@/lib/monitor-tags"
 import type { AppRoute, ConnectedKumaInstance, MonitorDetailsValues, MonitorSyncRecord } from "@/types"
 
 type MonitorPageProps = {
@@ -56,6 +57,7 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
   }
 
   const settingDiffs = getMonitorSettingDiffs(record, connectedInstances)
+  const structuralDiff = diffMonitorRecord(record, connectedInstances)
   const pendingTag = `monitor:${tagSuffixInput.trim()}`
 
   return (
@@ -128,6 +130,11 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
               })}
             </div>
           </div>
+          {structuralDiff && structuralDiff.issue === "different" && settingDiffs.length === 0 && (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              Instances have the same compared settings, but other fields (notifications, conditions, etc.) differ. These can only be edited on each instance individually.
+            </div>
+          )}
           <div className="grid gap-3">
             <div className="text-sm font-medium">Setting diff</div>
             <SettingsDiff diffs={settingDiffs} emptyMessage="All compared settings match across instances." />
