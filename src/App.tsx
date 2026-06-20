@@ -5,6 +5,7 @@ import { AppFooter } from "@/components/layout/AppFooter"
 import { StatusCard } from "@/components/layout/StatusCard"
 import { AuthFlow } from "@/features/auth/components/AuthFlow"
 import { DashboardPage } from "@/features/dashboard/components/DashboardPage"
+import { CreateMonitorPage } from "@/features/monitors/components/CreateMonitorPage"
 import { MonitorPage } from "@/features/monitors/components/MonitorPage"
 import { useAppRoute } from "@/hooks/useAppRoute"
 import { createKumaApiClient } from "@/api/kuma/client"
@@ -218,7 +219,7 @@ export default function App() {
     }
   }
 
-  async function saveMonitorDetails(tag: string, values: MonitorDetailsValues) {
+  async function saveMonitorDetails(tag: string, values: MonitorDetailsValues, groupName?: string) {
     const record = monitorRecords.find((entry) => entry.tag === tag)
     if (!record) return
 
@@ -230,7 +231,13 @@ export default function App() {
         const monitor = record.monitorsByInstance[instance.config.id]
         if (!monitor) continue
 
-        const response = await clientsRef.current[instance.config.id].editMonitor({ ...monitor, ...values })
+        const instanceValues = { ...values }
+        if (groupName !== undefined) {
+          const group = monitorGroups.find((g) => g.instance.config.id === instance.config.id && g.group.name === groupName)
+          instanceValues.parent = group?.group.id ?? null
+        }
+
+        const response = await clientsRef.current[instance.config.id].editMonitor({ ...monitor, ...instanceValues })
 
         if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "save failed"}`)
       }
@@ -290,6 +297,36 @@ export default function App() {
     }
   }
 
+  async function createMonitor(tag: string, values: MonitorDetailsValues, groupName?: string) {
+    setStatusMessage(`Creating ${tag} on all instances...`)
+    setErrorMessage(null)
+
+    try {
+      for (const instance of connectedInstances) {
+        const client = clientsRef.current[instance.config.id]
+
+        const instanceValues: MonitorDetailsValues = { ...values }
+        if (groupName) {
+          const group = monitorGroups.find((g) => g.instance.config.id === instance.config.id && g.group.name === groupName)
+          if (group) instanceValues.parent = group.group.id
+        }
+
+        const response = await client.addMonitor(instanceValues)
+        if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "create failed"}`)
+        if (response.monitorID) {
+          const tagResponse = await client.addMonitorTag(response.monitorID, tag)
+          if (!tagResponse.ok) throw new Error(`${instance.config.name}: ${tagResponse.msg ?? "tag failed"}`)
+        }
+      }
+
+      await refreshMonitors()
+      navigate(`/monitors/${encodeURIComponent(tag.replace(/^monitor:/, ""))}`)
+      setStatusMessage(`Created ${tag} successfully.`)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Create failed")
+    }
+  }
+
   function logout() {
     disconnectAll()
     clearTokens()
@@ -341,11 +378,19 @@ export default function App() {
               onNavigate={navigate}
               onPasswordLogin={authenticateWithPassword}
             />
+          ) : route === "/monitors/new" ? (
+            <CreateMonitorPage
+              monitorGroups={monitorGroups}
+              onBack={() => navigate("/dashboard")}
+              onNavigate={navigate}
+              onCreate={createMonitor}
+            />
           ) : route.startsWith("/monitors/") ? (
             <MonitorPage
               route={route}
               connectedInstances={connectedInstances}
               monitorRecords={monitorRecords}
+              monitorGroups={monitorGroups}
               onBack={() => navigate("/dashboard")}
               onNavigate={navigate}
               onSave={saveMonitorDetails}

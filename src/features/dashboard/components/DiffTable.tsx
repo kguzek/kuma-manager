@@ -1,7 +1,8 @@
 import { useState } from "react"
-import { ArrowRightLeft } from "lucide-react"
+import { ArrowRightLeft, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { RouteLink } from "@/components/navigation/RouteLink"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -39,9 +40,16 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ArrowRightLeft className="size-5" /> Diff page
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <ArrowRightLeft className="size-5" /> Diff page
+          </CardTitle>
+          <Button size="sm" variant="outline" asChild>
+            <RouteLink href="/monitors/new" onNavigate={onNavigate}>
+              <Plus /> New monitor
+            </RouteLink>
+          </Button>
+        </div>
         <CardDescription>
           Only monitors with at least one <code>monitor:</code> tag are compared. History, current status, ping, cert info, and IDs are
           ignored.

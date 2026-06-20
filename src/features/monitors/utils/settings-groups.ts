@@ -4,7 +4,7 @@ export type FieldGroup = {
   fields: string[]
 }
 
-const KNOWN_FIELD_GROUPS: FieldGroup[] = [
+export const KNOWN_FIELD_GROUPS: FieldGroup[] = [
   {
     label: "Core",
     defaultOpen: true,

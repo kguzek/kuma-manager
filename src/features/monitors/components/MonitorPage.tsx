@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Switch } from "@/components/ui/switch"
 import { SettingsDiff } from "@/features/monitors/components/SettingsDiff"
-import { diffMonitorRecord } from "@/features/monitors/utils/monitor-sync"
+import { diffMonitorRecord, getMonitorGroupViews } from "@/features/monitors/utils/monitor-sync"
 import { getFieldGroupLabel, getFieldGroupsForMonitor, getFieldLabel } from "@/features/monitors/utils/settings-groups"
 import { getMonitorSettingDiffs, getMonitorSettingFields } from "@/features/monitors/utils/settings-diff"
 import { getTagSuffix } from "@/lib/monitor-tags"
@@ -22,13 +22,23 @@ type MonitorPageProps = {
   route: AppRoute
   connectedInstances: ConnectedKumaInstance[]
   monitorRecords: MonitorSyncRecord[]
+  monitorGroups: ReturnType<typeof getMonitorGroupViews>
   onBack: () => void
   onNavigate: (route: AppRoute) => void
-  onSave: (tag: string, values: MonitorDetailsValues) => Promise<void>
+  onSave: (tag: string, values: MonitorDetailsValues, groupName?: string) => Promise<void>
   onRenameTag: (oldTag: string, newTag: string) => Promise<void>
 }
 
-export function MonitorPage({ route, connectedInstances, monitorRecords, onBack, onNavigate, onSave, onRenameTag }: MonitorPageProps) {
+export function MonitorPage({
+  route,
+  connectedInstances,
+  monitorRecords,
+  monitorGroups,
+  onBack,
+  onNavigate,
+  onSave,
+  onRenameTag,
+}: MonitorPageProps) {
   const [editingTag, setEditingTag] = useState(false)
   const [tagSuffixInput, setTagSuffixInput] = useState("")
   const tagSuffix = route.startsWith("/monitors/") ? decodeURIComponent(route.replace("/monitors/", "")) : ""
@@ -47,6 +57,14 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
   const form = useForm<MonitorDetailsValues>({
     values: record && firstMonitor ? Object.fromEntries(allFields.map((field) => [field, firstMonitor[field] ?? ""])) : undefined,
   })
+
+  const allGroupNames = [...new Set(monitorGroups.map((g) => g.group.name))].sort()
+  const firstInstanceId = connectedInstances.find((instance) => record?.monitorsByInstance[instance.config.id])?.config.id
+  const currentGroupName =
+    firstMonitor?.parent && firstInstanceId
+      ? (monitorGroups.find((g) => g.instance.config.id === firstInstanceId && g.group.id === firstMonitor.parent)?.group.name ?? "")
+      : ""
+  const [selectedGroup, setSelectedGroup] = useState(currentGroupName)
 
   if (!record || !firstMonitor) {
     return (
@@ -126,8 +144,8 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
 
     if (typeof value === "boolean") {
       return (
-        <div key={field} className="flex items-center justify-between rounded-lg bg-background/40 px-3 py-2">
-          <label className="text-sm" htmlFor={`monitor-${field}`}>
+        <div key={field} className="flex h-12 items-center gap-2 self-end rounded-lg bg-background/40 px-3">
+          <label className="flex-1 text-sm" htmlFor={`monitor-${field}`}>
             {label}
           </label>
           <Switch id={`monitor-${field}`} checked={!!form.watch(field)} onCheckedChange={(checked) => form.setValue(field, checked)} />
@@ -251,10 +269,28 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
               })}
             </div>
           </div>
-          <form className="grid gap-5" onSubmit={form.handleSubmit((values) => onSave(tag, values))}>
+          <form className="grid gap-5" onSubmit={form.handleSubmit((values) => onSave(tag, values, selectedGroup || undefined))}>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search settings…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium" htmlFor="monitor-group">
+                Monitor group
+              </label>
+              <select
+                id="monitor-group"
+                value={selectedGroup}
+                onChange={(e) => setSelectedGroup(e.target.value)}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <option value="">None</option>
+                {allGroupNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             </div>
             <Accordion type="multiple" value={accordionValues} onValueChange={setAccordionValues} className="grid gap-3">
               {filteredGroups.map((group) => (
