@@ -1,0 +1,71 @@
+export type KumaInstanceConfig = {
+  id: string
+  name: string
+  url: string
+}
+
+export type StoredKumaToken = {
+  token: string
+  savedAt: string
+}
+
+export type KumaTag = {
+  tag_id?: number
+  monitor_id?: number
+  value: string | null
+  name: string
+  color?: string
+}
+
+export type KumaMonitor = {
+  id: number
+  name: string
+  type: string
+  url?: string | null
+  hostname?: string | null
+  port?: number | string | null
+  method?: string | null
+  interval?: number
+  retryInterval?: number
+  resendInterval?: number
+  maxretries?: number
+  active?: boolean
+  tags?: KumaTag[]
+  notificationIDList?: Record<string, boolean>
+  accepted_statuscodes_json?: string
+  conditions?: string
+  [key: string]: unknown
+}
+
+export type KumaLoginResult = {
+  ok: boolean
+  msg?: string
+  token?: string
+  tokenRequired?: boolean
+}
+
+export type KumaCommandResult = {
+  ok: boolean
+  msg?: string
+  monitorID?: number
+  [key: string]: unknown
+}
+
+export type ConnectedKumaInstance = {
+  config: KumaInstanceConfig
+  token: string
+  monitors: KumaMonitor[]
+}
+
+export type MonitorSyncRecord = {
+  tag: string
+  suggestedTag: string | null
+  monitorsByInstance: Record<string, KumaMonitor>
+}
+
+export type MonitorDifference = {
+  tag: string
+  issue: "missing" | "different"
+  description: string
+  instances: string[]
+}
