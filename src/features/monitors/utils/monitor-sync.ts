@@ -1,6 +1,16 @@
 import type { ConnectedKumaInstance, KumaMonitor, MonitorDifference, MonitorSyncRecord } from "@/types"
 
 const SYNC_TAG_PREFIX = "monitor:"
+
+export const INSTANCE_LOCAL_FIELDS = new Set([
+  "userID",
+  "user_id",
+  "proxy_id",
+  "createdDate",
+  "created_date",
+  "modifiedDate",
+  "modified_date",
+])
 const IGNORED_MONITOR_FIELDS = new Set([
   "id",
   "userID",
