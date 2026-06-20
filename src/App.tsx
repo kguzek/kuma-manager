@@ -44,6 +44,7 @@ export default function App() {
   useEffect(() => {
     if (!canRestoreSavedLogin || attemptedSavedLoginRef.current || sessionState !== "configuring") return
     attemptedSavedLoginRef.current = true
+    if (!route.startsWith("/monitors/") && route !== "/login") navigate("/login")
     void authenticateWithSavedTokens()
   }, [canRestoreSavedLogin, sessionState])
 
@@ -261,7 +262,10 @@ export default function App() {
     return connectedInstances.find((instance) => instance.config.id === instanceId)?.config.name ?? instanceId
   }
 
-  const alertWidthClass = sessionState === "authenticated" ? "w-full" : route === "/login" ? "mx-auto w-full max-w-md" : "mx-auto w-full max-w-5xl"
+  const alertWidthClass = sessionState !== "authenticated"
+    ? route === "/login" ? "mx-auto w-full max-w-md" : "mx-auto w-full max-w-5xl"
+    : route.startsWith("/monitors/") ? "mx-auto w-full max-w-3xl" : "w-full"
+  const statusTone = sessionState === "authenticating" ? "loading" : "success"
 
   return (
     <main className="dot-grid-bg min-h-svh px-4 py-6 text-foreground sm:px-6 lg:px-10">
@@ -269,7 +273,7 @@ export default function App() {
         <AppHeader sessionState={sessionState} onRefresh={refreshMonitors} onLogout={logout} />
         {(statusMessage || errorMessage) && (
           <div className={`${alertWidthClass} grid gap-3`}>
-            {statusMessage && <StatusCard message={statusMessage} tone="success" />}
+            {statusMessage && <StatusCard message={statusMessage} tone={statusTone} />}
             {errorMessage && <StatusCard message={errorMessage} tone="error" />}
           </div>
         )}
@@ -283,7 +287,7 @@ export default function App() {
             onPasswordLogin={authenticateWithPassword}
           />
         ) : route.startsWith("/monitors/") ? (
-          <MonitorPage route={route} connectedInstances={connectedInstances} monitorRecords={monitorRecords} onBack={() => navigate("/dashboard")} onSave={saveMonitorDetails} />
+          <MonitorPage route={route} connectedInstances={connectedInstances} monitorRecords={monitorRecords} onBack={() => navigate("/dashboard")} onNavigate={navigate} onSave={saveMonitorDetails} />
         ) : (
           <DashboardPage
             connectedInstances={connectedInstances}

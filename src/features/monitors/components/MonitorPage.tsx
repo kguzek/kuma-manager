@@ -3,6 +3,7 @@ import { ArrowLeft, Save, Tags } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { RouteLink } from "@/components/navigation/RouteLink"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -13,10 +14,11 @@ type MonitorPageProps = {
   connectedInstances: ConnectedKumaInstance[]
   monitorRecords: MonitorSyncRecord[]
   onBack: () => void
+  onNavigate: (route: AppRoute) => void
   onSave: (tag: string, values: MonitorDetailsValues) => Promise<void>
 }
 
-export function MonitorPage({ route, connectedInstances, monitorRecords, onBack, onSave }: MonitorPageProps) {
+export function MonitorPage({ route, connectedInstances, monitorRecords, onBack, onNavigate, onSave }: MonitorPageProps) {
   const tagSuffix = route.startsWith("/monitors/") ? decodeURIComponent(route.replace("/monitors/", "")) : ""
   const tag = `monitor:${tagSuffix}`
   const record = monitorRecords.find((entry) => entry.tag === tag)
@@ -39,7 +41,7 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
           <CardDescription>No synced monitor exists for <code>{tag}</code>.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" onClick={onBack}><ArrowLeft /> Back</Button>
+          <Button variant="outline" asChild><RouteLink href="/dashboard" onNavigate={onNavigate}><ArrowLeft /> Back</RouteLink></Button>
         </CardContent>
       </Card>
     )
@@ -49,7 +51,7 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
     <Card className="mx-auto w-full max-w-3xl">
       <CardHeader>
         <div className="mb-2">
-          <Button variant="ghost" onClick={onBack}><ArrowLeft /> Back</Button>
+          <Button variant="ghost" asChild><RouteLink href="/dashboard" onNavigate={onNavigate}><ArrowLeft /> Back</RouteLink></Button>
         </div>
         <CardTitle className="flex items-center gap-2"><Tags className="size-5" /> {tag}</CardTitle>
         <CardDescription>Edit shared monitor fields and save them to every instance where this tag exists.</CardDescription>
@@ -93,7 +95,7 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
             </div>
           </div>
           <div className="flex justify-end">
-            <Button type="submit"><Save /> Save to all</Button>
+            <Button type="submit"><Save /> Save</Button>
           </div>
         </form>
       </CardContent>

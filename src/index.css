@@ -86,6 +86,11 @@ body {
   color-scheme: dark;
 }
 
+#root {
+  min-height: 100vh;
+  background: var(--background);
+}
+
 .dot-grid-bg {
   background-color: var(--background);
   background-image:

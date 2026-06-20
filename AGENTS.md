@@ -21,6 +21,13 @@
 - Avoid `useMemo` and `useCallback` unless they solve a concrete performance or referential-stability issue.
 - Keep effects focused on synchronization with external systems: browser history, storage, network sessions, or subscriptions.
 
+## Accessibility
+
+- Use real HTML links (`<a href="...">`) for navigation, not click-only buttons or divs.
+- When navigation should look like a Shadcn button, render `Button` with `asChild` and put the link inside it.
+- Preserve standard browser behaviors for links, including open-in-new-tab and modifier-click behavior.
+- Keep global status/alert messaging in one page-level location; avoid duplicating progress alerts inside cards.
+
 ## Styling
 
 - Use Tailwind CSS v4 utilities and theme tokens.

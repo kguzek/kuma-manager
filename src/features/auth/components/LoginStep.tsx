@@ -2,6 +2,7 @@ import { ArrowLeft, RefreshCw, Server, ShieldCheck } from "lucide-react"
 import { useForm } from "react-hook-form"
 
 import { Button } from "@/components/ui/button"
+import { RouteLink } from "@/components/navigation/RouteLink"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -18,19 +19,19 @@ type LoginStepProps = {
 export function LoginStep({ instances, authenticating, onNavigate, onPasswordLogin }: LoginStepProps) {
   const loginForm = useForm<LoginFormValues>({
     defaultValues: {
-      separate: false,
+      single: true,
       username: "",
       password: "",
       credentials: Object.fromEntries(instances.map((instance) => [instance.id, { username: "", password: "" }])),
     },
   })
-  const separateCredentials = loginForm.watch("separate")
+  const singleCredentials = loginForm.watch("single")
   const activeInstances = instances.filter((instance) => instance.url.trim())
 
   function submitLogin(values: LoginFormValues) {
-    const credentials = values.separate
-      ? Object.fromEntries(activeInstances.map((instance) => [instance.id, values.credentials[instance.id] ?? { username: "", password: "" }]))
-      : Object.fromEntries(activeInstances.map((instance) => [instance.id, { username: values.username, password: values.password }]))
+    const credentials = values.single
+      ? Object.fromEntries(activeInstances.map((instance) => [instance.id, { username: values.username, password: values.password }]))
+      : Object.fromEntries(activeInstances.map((instance) => [instance.id, values.credentials[instance.id] ?? { username: "", password: "" }]))
 
     const missing = Object.entries(credentials).find(([, credential]) => !credential.username.trim() || !credential.password)
     if (missing) {
@@ -53,19 +54,26 @@ export function LoginStep({ instances, authenticating, onNavigate, onPasswordLog
       </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-5" onSubmit={loginForm.handleSubmit(submitLogin)}>
-          {authenticating && (
-            <div className="flex items-center gap-2 rounded-xl border bg-muted/40 p-3 text-sm text-muted-foreground">
-              <RefreshCw className="size-4 animate-spin" /> Signing in...
-            </div>
-          )}
           <Field orientation="horizontal" className="items-center justify-between rounded-xl border bg-muted/30 p-3">
             <div>
-              <FieldLabel htmlFor="separate-credentials">Separate credentials</FieldLabel>
-              <FieldDescription>Use different login details per instance.</FieldDescription>
+              <FieldLabel htmlFor="single-credentials">Single credentials</FieldLabel>
+              <FieldDescription>Use one login for every instance.</FieldDescription>
             </div>
-            <Switch id="separate-credentials" checked={separateCredentials} onCheckedChange={(checked) => loginForm.setValue("separate", checked, { shouldDirty: true })} />
+            <Switch id="single-credentials" checked={singleCredentials} onCheckedChange={(checked) => loginForm.setValue("single", checked, { shouldDirty: true })} />
           </Field>
-          {separateCredentials ? (
+          {singleCredentials ? (
+            <>
+              <Field>
+                <FieldLabel htmlFor="username">Username</FieldLabel>
+                <Input id="username" autoComplete="username" {...loginForm.register("username")} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Input id="password" type="password" autoComplete="current-password" {...loginForm.register("password")} />
+                <FieldDescription>Used for every instance.</FieldDescription>
+              </Field>
+            </>
+          ) : (
             <div className="grid gap-4">
               {activeInstances.map((instance) => (
                 <div key={instance.id} className="grid gap-3 rounded-xl border p-3">
@@ -81,24 +89,14 @@ export function LoginStep({ instances, authenticating, onNavigate, onPasswordLog
                 </div>
               ))}
             </div>
-          ) : (
-            <>
-              <Field>
-                <FieldLabel htmlFor="username">Username</FieldLabel>
-                <Input id="username" autoComplete="username" {...loginForm.register("username")} />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
-                <Input id="password" type="password" autoComplete="current-password" {...loginForm.register("password")} />
-                <FieldDescription>Used for every instance.</FieldDescription>
-              </Field>
-            </>
           )}
           <FieldError errors={[loginForm.formState.errors.root]} />
           <div className="grid gap-2">
             <Button type="submit" size="lg" disabled={authenticating}>{authenticating ? <RefreshCw className="animate-spin" /> : <ShieldCheck />} Sign in</Button>
           </div>
-          <Button type="button" variant="ghost" onClick={() => onNavigate("/instances")}><ArrowLeft /> Back</Button>
+          <Button type="button" variant="ghost" asChild>
+            <RouteLink href="/instances" onNavigate={onNavigate}><ArrowLeft /> Back</RouteLink>
+          </Button>
         </form>
       </CardContent>
     </Card>
