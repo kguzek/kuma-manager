@@ -9,6 +9,7 @@ export function useAlertState() {
   useEffect(() => {
     if (errorMessage && alertRef.current) {
       alertRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
+      setStatusMessage(null)
     }
   }, [errorMessage])
 

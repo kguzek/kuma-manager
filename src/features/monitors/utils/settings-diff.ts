@@ -62,7 +62,6 @@ export function getMonitorSettingDiffs(record: MonitorSyncRecord, instances: Con
       if (instanceId == null) continue
       const monitor = record.monitorsByInstance[instanceId]
       if (monitor == null) continue
-      console.log({ field, bypassRule, values, monitor })
       if (monitor.tags == null || !monitor.tags.some((tag) => tag.name === bypassRule.monitorMatchTag)) continue
       const uniqueValuesExcludingBypass = getUniqueValueCount(values.filter((entry) => entry.instanceName !== bypassRule.instanceName))
 

@@ -131,7 +131,12 @@ export function useKumaMonitors(
           return {
             ...instance,
             monitors: instance.monitors.map((entry) =>
-              entry.id === monitor.id ? { ...entry, tags: [...(entry.tags ?? []), { name: tag, value: null, color: "#2563eb" }] } : entry,
+              entry.id === monitor.id
+                ? {
+                    ...entry,
+                    tags: [...(entry.tags ?? []), { name: tag, value: null, color: "#2563eb" }],
+                  }
+                : entry,
             ),
           }
         }),
