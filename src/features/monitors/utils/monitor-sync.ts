@@ -148,10 +148,6 @@ export function prepareMonitorForEdit(source: KumaMonitor, target: KumaMonitor):
   } as KumaMonitor
 }
 
-function stableJson(value: unknown): string {
-  return JSON.stringify(sortObject(value))
-}
-
 function sortObject(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortObject)
   if (!value || typeof value !== "object") return value

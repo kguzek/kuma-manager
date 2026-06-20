@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ReactNode } from "react"
+import type { ReactNode } from "react"
 
 type MetricCardProps = {
   title: string
