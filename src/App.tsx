@@ -1,13 +1,13 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react"
 import { useFieldArray, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { AlertCircle, ArrowRightLeft, CheckCircle2, LogOut, Plus, RefreshCw, Save, ShieldCheck, Tags } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowRightLeft, CheckCircle2, ChevronRight, KeyRound, Link, LogOut, Plus, RefreshCw, Server, ShieldCheck, Tags, Trash2, type LucideIcon } from "lucide-react"
 import { z } from "zod"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { createKumaApiClient, type KumaApiClient } from "@/lib/kuma-api"
@@ -216,18 +216,20 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-svh bg-[radial-gradient(circle_at_top_left,var(--muted),transparent_34rem)] px-4 py-6 text-foreground sm:px-6 lg:px-10">
+    <main className="dot-grid-bg min-h-svh px-4 py-6 text-foreground sm:px-6 lg:px-10">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="flex flex-col justify-between gap-4 rounded-3xl border bg-background/80 p-6 shadow-sm backdrop-blur md:flex-row md:items-center">
+        <header className={`flex flex-col justify-between gap-4 py-4 ${sessionState === "authenticated" ? "md:flex-row md:items-center" : "items-center text-center"}`}>
           <div>
-            <div className="mb-3 flex items-center gap-2">
-              <Badge variant="outline" className="rounded-full">kuma-manager</Badge>
-              <Badge className="rounded-full" variant={sessionState === "authenticated" ? "default" : "secondary"}>{sessionState}</Badge>
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Unified Uptime Kuma control plane</h1>
-            <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
-              Manage any number of Kuma instances through one session. Monitor configuration sync is keyed only by tags starting with <code className="rounded bg-muted px-1 py-0.5">monitor:</code>, so normal tags remain untouched.
-            </p>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Kuma Manager</h1>
+            {sessionState === "authenticated" ? (
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
+                Comparing monitor config by <code className="rounded bg-muted px-1 py-0.5">monitor:</code> tags.
+              </p>
+            ) : (
+              <p className="mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">
+                Manage synchronized Uptime Kuma instances from one dashboard.
+              </p>
+            )}
           </div>
           {sessionState === "authenticated" && (
             <div className="flex flex-wrap gap-2">
@@ -279,77 +281,160 @@ function AuthWall({
   onPasswordLogin: (credentials: LoginFormValues) => Promise<void>
   onTokenLogin: () => Promise<void>
 }) {
+  const [step, setStep] = useState<"instances" | "login">("instances")
   const instanceForm = useForm<InstanceFormValues>({ resolver: zodResolver(instanceSchema), values: { instances } })
   const loginForm = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema), defaultValues: { username: "", password: "" } })
   const { fields, append, remove } = useFieldArray({ control: instanceForm.control, name: "instances" })
-  const hasSavedTokens = instances.every((instance) => !instance.url.trim() || tokens[instance.id]?.token)
+  const watchedInstances = instanceForm.watch("instances")
+  const activeInstances = watchedInstances.filter((instance) => instance.url.trim())
+  const hasSavedTokens = activeInstances.length > 0 && activeInstances.every((instance) => tokens[instance.id]?.token)
 
-  function saveInstanceConfig(values: InstanceFormValues) {
+  useEffect(() => {
+    const subscription = instanceForm.watch((value) => {
+      const nextInstances = value.instances?.flatMap((instance) => {
+        if (!instance?.id) return []
+
+        return {
+          id: instance.id,
+          name: instance.name ?? "",
+          url: instance.url ?? "",
+        }
+      })
+
+      if (nextInstances?.length) onInstancesChange(nextInstances)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [instanceForm, onInstancesChange])
+
+  const goToLogin = instanceForm.handleSubmit((values) => {
     onInstancesChange(values.instances)
-  }
+    setStep("login")
+  })
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-      <Card>
-        <CardHeader>
-          <CardTitle>Instances</CardTitle>
-          <CardDescription>Only instance URLs are saved before login. Add as many Kuma servers as you need.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="flex flex-col gap-5" onSubmit={instanceForm.handleSubmit(saveInstanceConfig)}>
-            <FieldSet>
-              <FieldLegend>Kuma URLs</FieldLegend>
-              <FieldGroup>
-                {fields.map((field, index) => (
-                  <div key={field.id} className="grid gap-3 rounded-2xl border p-4 md:grid-cols-[0.7fr_1fr_auto] md:items-start">
-                    <Field data-invalid={!!instanceForm.formState.errors.instances?.[index]?.name}>
-                      <FieldLabel htmlFor={`instance-${index}-name`}>Name</FieldLabel>
-                      <Input id={`instance-${index}-name`} {...instanceForm.register(`instances.${index}.name`)} />
-                      <FieldError errors={[instanceForm.formState.errors.instances?.[index]?.name]} />
-                    </Field>
-                    <Field data-invalid={!!instanceForm.formState.errors.instances?.[index]?.url}>
-                      <FieldLabel htmlFor={`instance-${index}-url`}>URL</FieldLabel>
-                      <Input id={`instance-${index}-url`} placeholder="https://kuma.example.com" {...instanceForm.register(`instances.${index}.url`)} />
-                      <FieldError errors={[instanceForm.formState.errors.instances?.[index]?.url]} />
-                    </Field>
-                    <Button type="button" variant="outline" disabled={fields.length === 1} onClick={() => remove(index)}>Remove</Button>
-                  </div>
-                ))}
-              </FieldGroup>
-            </FieldSet>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => append({ id: crypto.randomUUID(), name: `Kuma ${fields.length + 1}`, url: "" })}><Plus /> Add instance</Button>
-              <Button type="submit"><Save /> Save URLs</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="mx-auto w-full max-w-5xl">
+      <div className="mb-5 flex items-center justify-center gap-3 text-sm text-muted-foreground">
+        <StepPill active={step === "instances"} icon={Server} label="Instances" />
+        <ChevronRight className="size-4" />
+        <StepPill active={step === "login"} icon={KeyRound} label="Login" />
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Auth wall</CardTitle>
-          <CardDescription>Login succeeds only if every configured Kuma accepts the same username and password. Kuma JWTs are saved locally after success.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="flex flex-col gap-5" onSubmit={loginForm.handleSubmit(onPasswordLogin)}>
-            <Field data-invalid={!!loginForm.formState.errors.username}>
-              <FieldLabel htmlFor="username">Username</FieldLabel>
-              <Input id="username" autoComplete="username" {...loginForm.register("username")} />
-              <FieldError errors={[loginForm.formState.errors.username]} />
-            </Field>
-            <Field data-invalid={!!loginForm.formState.errors.password}>
-              <FieldLabel htmlFor="password">Password</FieldLabel>
-              <Input id="password" type="password" autoComplete="current-password" {...loginForm.register("password")} />
-              <FieldDescription>Sent directly to each Kuma Socket.io endpoint with remember enabled.</FieldDescription>
-              <FieldError errors={[loginForm.formState.errors.password]} />
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={authenticating}>{authenticating ? <RefreshCw className="animate-spin" /> : <ShieldCheck />} Login to all</Button>
-              <Button type="button" variant="outline" disabled={authenticating || !hasSavedTokens} onClick={onTokenLogin}>Use saved sessions</Button>
+      {step === "instances" ? (
+        <Card className="setup-panel">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Add Kuma instances</CardTitle>
+            <CardDescription>Your instances are saved to this device automatically.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="flex flex-col gap-6" onSubmit={goToLogin}>
+              <div className="grid gap-4 md:grid-cols-2">
+                {fields.map((field, index) => (
+                  <Card key={field.id} className="instance-card relative overflow-hidden border-input">
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="grid size-9 place-items-center rounded-full bg-muted text-muted-foreground">
+                          <Server className="size-4" />
+                        </div>
+                        <CardTitle className="text-base">Instance {index + 1}</CardTitle>
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        disabled={fields.length === 1}
+                        aria-label="Remove instance"
+                        onClick={() => remove(index)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </CardHeader>
+                    <CardContent className="grid gap-4">
+                      <Field data-invalid={!!instanceForm.formState.errors.instances?.[index]?.name}>
+                        <FieldLabel htmlFor={`instance-${index}-name`}>Name</FieldLabel>
+                        <Input id={`instance-${index}-name`} {...instanceForm.register(`instances.${index}.name`)} />
+                        <FieldError errors={[instanceForm.formState.errors.instances?.[index]?.name]} />
+                      </Field>
+                      <Field data-invalid={!!instanceForm.formState.errors.instances?.[index]?.url}>
+                        <FieldLabel htmlFor={`instance-${index}-url`}>URL</FieldLabel>
+                        <div className="relative">
+                          <Link className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input id={`instance-${index}-url`} className="pl-9" placeholder="https://kuma.example.com" {...instanceForm.register(`instances.${index}.url`)} />
+                        </div>
+                        <FieldError errors={[instanceForm.formState.errors.instances?.[index]?.url]} />
+                      </Field>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                <button
+                  type="button"
+                  className="group grid min-h-64 place-items-center rounded-xl border border-dashed border-input bg-card/40 p-6 text-muted-foreground transition hover:border-primary/50 hover:bg-card/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  onClick={() => append({ id: crypto.randomUUID(), name: `Kuma ${fields.length + 1}`, url: "" })}
+                >
+                  <span className="grid gap-3 text-center">
+                    <span className="mx-auto grid size-14 place-items-center rounded-full bg-muted transition group-hover:bg-primary group-hover:text-primary-foreground">
+                      <Plus className="size-7" />
+                    </span>
+                    <span className="text-sm font-medium">Add instance</span>
+                  </span>
+                </button>
+              </div>
+
+              <div className="flex justify-end">
+                <Button type="submit" size="lg" disabled={activeInstances.length === 0}>
+                  Next <ChevronRight />
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="setup-panel mx-auto max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-2 grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
+              <ShieldCheck className="size-5" />
             </div>
-          </form>
-        </CardContent>
-      </Card>
+            <CardTitle className="text-2xl">Sign in</CardTitle>
+            <CardDescription>{activeInstances.length} instance{activeInstances.length === 1 ? "" : "s"} configured</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="flex flex-col gap-5" onSubmit={loginForm.handleSubmit(onPasswordLogin)}>
+              <Field data-invalid={!!loginForm.formState.errors.username}>
+                <FieldLabel htmlFor="username">Username</FieldLabel>
+                <Input id="username" autoComplete="username" {...loginForm.register("username")} />
+                <FieldError errors={[loginForm.formState.errors.username]} />
+              </Field>
+              <Field data-invalid={!!loginForm.formState.errors.password}>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Input id="password" type="password" autoComplete="current-password" {...loginForm.register("password")} />
+                <FieldDescription>Must work on every instance.</FieldDescription>
+                <FieldError errors={[loginForm.formState.errors.password]} />
+              </Field>
+              <div className="grid gap-2">
+                <Button type="submit" size="lg" disabled={authenticating}>
+                  {authenticating ? <RefreshCw className="animate-spin" /> : <ShieldCheck />} Sign in
+                </Button>
+                <Button type="button" variant="outline" disabled={authenticating || !hasSavedTokens} onClick={onTokenLogin}>
+                  <KeyRound /> Use saved login
+                </Button>
+              </div>
+              <Button type="button" variant="ghost" onClick={() => setStep("instances")}>
+                <ArrowLeft /> Back
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+function StepPill({ active, icon: Icon, label }: { active: boolean; icon: LucideIcon; label: string }) {
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 transition ${active ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card text-muted-foreground"}`}>
+      <Icon className="size-3.5" />
+      {label}
     </div>
   )
 }
