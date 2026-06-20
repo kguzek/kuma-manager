@@ -10,7 +10,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
     "lint": "biome lint",
     "prepare": "husky",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "types:check": "tsc --noEmit"
   },
   "lint-staged": {
     "*.{ts,tsx,css,json}": [
