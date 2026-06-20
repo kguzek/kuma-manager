@@ -1,7 +1,7 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react"
 import { useFieldArray, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { AlertCircle, ArrowLeft, ArrowRightLeft, CheckCircle2, ChevronRight, KeyRound, Link, LogOut, Plus, RefreshCw, Server, ShieldCheck, Tags, Trash2, type LucideIcon } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowRight, ArrowRightLeft, CheckCircle2, ChevronRight, KeyRound, Link, LogOut, Pencil, Plus, RefreshCw, Save, Server, ShieldCheck, Tags, Trash2, X, type LucideIcon } from "lucide-react"
 import { z } from "zod"
 
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { createKumaApiClient, type KumaApiClient } from "@/lib/kuma-api"
@@ -37,8 +38,15 @@ type LoginFormValues = {
   password: string
   credentials: LoginCredentials
 }
+type MonitorDetailsValues = {
+  name: string
+  url: string
+  interval: number
+  retryInterval: number
+  maxretries: number
+}
 type SessionState = "configuring" | "authenticating" | "authenticated"
-type AppRoute = "/instances" | "/login" | "/dashboard"
+type AppRoute = "/instances" | "/login" | "/dashboard" | `/monitors/${string}`
 
 export default function App() {
   const [instances, setInstances] = useState<KumaInstanceConfig[]>(() => loadInstances())
@@ -121,7 +129,7 @@ export default function App() {
         setConnectedInstances(connected)
         setSessionState("authenticated")
         setStatusMessage("Authenticated against every instance.")
-        navigate("/dashboard")
+        navigate(route.startsWith("/monitors/") ? route : "/dashboard")
       })
     } catch (error) {
       disconnectAll()
@@ -157,7 +165,7 @@ export default function App() {
       setConnectedInstances(connected)
       setSessionState("authenticated")
       setStatusMessage("Restored saved sessions.")
-      navigate("/dashboard")
+      navigate(route.startsWith("/monitors/") ? route : "/dashboard")
       })
     } catch (error) {
       disconnectAll()
@@ -218,6 +226,16 @@ export default function App() {
     try {
       const response = await client.addMonitorTag(monitor.id, tag)
       if (!response.ok) throw new Error(response.msg ?? "Failed to apply tag")
+      setConnectedInstances((current) => current.map((instance) => {
+        if (instance.config.id !== instanceId) return instance
+
+        return {
+          ...instance,
+          monitors: instance.monitors.map((entry) => entry.id === monitor.id
+            ? { ...entry, tags: [...(entry.tags ?? []), { name: tag, value: null, color: "#2563eb" }] }
+            : entry),
+        }
+      }))
       await refreshMonitors()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to apply tag")
@@ -242,6 +260,52 @@ export default function App() {
 
   function instanceName(instanceId: string) {
     return connectedInstances.find((instance) => instance.config.id === instanceId)?.config.name ?? instanceId
+  }
+
+  async function saveMonitorDetails(tag: string, values: MonitorDetailsValues) {
+    const record = monitorRecords.find((entry) => entry.tag === tag)
+    if (!record) return
+
+    setStatusMessage(`Saving ${tag}...`)
+    setErrorMessage(null)
+
+    try {
+      for (const instance of connectedInstances) {
+        const monitor = record.monitorsByInstance[instance.config.id]
+        if (!monitor) continue
+
+        const response = await clientsRef.current[instance.config.id].editMonitor({
+          ...monitor,
+          name: values.name,
+          url: values.url,
+          interval: values.interval,
+          retryInterval: values.retryInterval,
+          maxretries: values.maxretries,
+        })
+
+        if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "save failed"}`)
+      }
+
+      setConnectedInstances((current) => current.map((instance) => ({
+        ...instance,
+        monitors: instance.monitors.map((monitor) => {
+          const target = record.monitorsByInstance[instance.config.id]
+          if (!target || monitor.id !== target.id) return monitor
+
+          return {
+            ...monitor,
+            name: values.name,
+            url: values.url,
+            interval: values.interval,
+            retryInterval: values.retryInterval,
+            maxretries: values.maxretries,
+          }
+        }),
+      })))
+      setStatusMessage(`Saved ${tag} across all available instances.`)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Save failed")
+    }
   }
 
   const alertWidthClass = sessionState === "authenticated" ? "w-full" : route === "/login" ? "mx-auto w-full max-w-md" : "mx-auto w-full max-w-5xl"
@@ -279,12 +343,20 @@ export default function App() {
 
         {sessionState !== "authenticated" ? (
           <AuthWall
-            route={route === "/dashboard" ? "/instances" : route}
+            route={route === "/instances" ? "/instances" : "/login"}
             instances={instances}
             authenticating={sessionState === "authenticating"}
             onInstancesChange={setInstances}
             onNavigate={navigate}
             onPasswordLogin={authenticateWithPassword}
+          />
+        ) : route.startsWith("/monitors/") ? (
+          <MonitorPage
+            route={route}
+            connectedInstances={connectedInstances}
+            monitorRecords={monitorRecords}
+            onBack={() => navigate("/dashboard")}
+            onSave={saveMonitorDetails}
           />
         ) : (
           <Dashboard
@@ -295,6 +367,7 @@ export default function App() {
             monitorGroups={monitorGroups}
             onSyncFrom={syncFrom}
             onApplySuggestedTag={applySuggestedTag}
+            onNavigate={navigate}
           />
         )}
       </div>
@@ -548,6 +621,7 @@ function Dashboard({
   monitorGroups,
   onSyncFrom,
   onApplySuggestedTag,
+  onNavigate,
 }: {
   connectedInstances: ConnectedKumaInstance[]
   differences: MonitorDifference[]
@@ -556,8 +630,10 @@ function Dashboard({
   monitorGroups: ReturnType<typeof getMonitorGroupViews>
   onSyncFrom: (sourceInstanceId: string, tag: string) => Promise<void>
   onApplySuggestedTag: (instanceId: string, monitor: KumaMonitor, tag: string) => Promise<void>
+  onNavigate: (route: AppRoute) => void
 }) {
   const [customTags, setCustomTags] = useState<Record<string, string>>({})
+  const [editingTags, setEditingTags] = useState<Record<string, boolean>>({})
 
   return (
     <div className="grid gap-6">
@@ -588,7 +664,15 @@ function Dashboard({
                   const diff = differences.find((entry) => entry.tag === record.tag)
                   return (
                     <TableRow key={record.tag}>
-                      <TableCell className="font-mono text-xs">{record.tag}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="link"
+                          className="h-auto p-0 font-mono text-xs"
+                          onClick={() => onNavigate(`/monitors/${encodeURIComponent(stripMonitorPrefix(record.tag))}`)}
+                        >
+                          {record.tag} <ArrowRight className="size-3" />
+                        </Button>
+                      </TableCell>
                       {connectedInstances.map((instance) => {
                         const monitor = record.monitorsByInstance[instance.config.id]
                         return <TableCell key={instance.config.id}>{monitor ? monitor.name : <span className="text-muted-foreground">Missing</span>}</TableCell>
@@ -622,7 +706,6 @@ function Dashboard({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Server className="size-5" /> Monitor groups</CardTitle>
-          <CardDescription>Groups are containers in Kuma, not syncable monitor endpoints.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           {monitorGroups.map(({ instance, group, children }) => (
@@ -658,23 +741,46 @@ function Dashboard({
                 <div className="font-medium">{monitor.name}</div>
                 <div className="text-sm text-muted-foreground">{instance.config.name} · {monitor.url ?? monitor.hostname ?? "No URL/hostname"}</div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  className="w-72 font-mono text-xs"
-                  placeholder="monitor:example.com"
-                  value={customTags[`${instance.config.id}-${monitor.id}`] ?? suggestedTag ?? ""}
-                  onChange={(event) => setCustomTags((current) => ({
-                    ...current,
-                    [`${instance.config.id}-${monitor.id}`]: event.target.value,
-                  }))}
-                />
+              <div className="flex min-w-80 flex-wrap items-center justify-end gap-2">
+                {editingTags[`${instance.config.id}-${monitor.id}`] ? (
+                  <InputGroup className="w-72 font-mono">
+                    <InputGroupAddon>monitor:</InputGroupAddon>
+                    <InputGroupInput
+                      value={getTagSuffix(customTags[`${instance.config.id}-${monitor.id}`] ?? suggestedTag)}
+                      placeholder="example.com"
+                      onChange={(event) => setCustomTags((current) => ({
+                        ...current,
+                        [`${instance.config.id}-${monitor.id}`]: `monitor:${event.target.value.replace(/^monitor:/, "")}`,
+                      }))}
+                    />
+                  </InputGroup>
+                ) : (
+                  <Badge variant="outline" className="w-72 justify-start font-mono">
+                    {suggestedTag ?? "No suggestion"}
+                  </Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label="Edit tag"
+                  onClick={() => {
+                    const key = `${instance.config.id}-${monitor.id}`
+                    setCustomTags((current) => ({ ...current, [key]: current[key] ?? suggestedTag ?? "monitor:" }))
+                    setEditingTags((current) => ({ ...current, [key]: !current[key] }))
+                  }}
+                >
+                  {editingTags[`${instance.config.id}-${monitor.id}`] ? <X /> : <Pencil />}
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={!getPendingTag(customTags[`${instance.config.id}-${monitor.id}`], suggestedTag).startsWith("monitor:")}
-                  onClick={() => onApplySuggestedTag(instance.config.id, monitor, getPendingTag(customTags[`${instance.config.id}-${monitor.id}`], suggestedTag))}
+                  onClick={() => {
+                    const tag = getPendingTag(customTags[`${instance.config.id}-${monitor.id}`], suggestedTag)
+                    void onApplySuggestedTag(instance.config.id, monitor, tag)
+                  }}
                 >
-                  Apply tag
+                  <Tags /> Add
                 </Button>
               </div>
             </div>
@@ -698,13 +804,121 @@ function MetricCard({ title, value, description }: { title: string; value: numbe
   )
 }
 
+function MonitorPage({
+  route,
+  connectedInstances,
+  monitorRecords,
+  onBack,
+  onSave,
+}: {
+  route: AppRoute
+  connectedInstances: ConnectedKumaInstance[]
+  monitorRecords: ReturnType<typeof buildMonitorRecords>
+  onBack: () => void
+  onSave: (tag: string, values: MonitorDetailsValues) => Promise<void>
+}) {
+  const tagSuffix = route.startsWith("/monitors/") ? decodeURIComponent(route.replace("/monitors/", "")) : ""
+  const tag = `monitor:${tagSuffix}`
+  const record = monitorRecords.find((entry) => entry.tag === tag)
+  const firstMonitor = connectedInstances.map((instance) => record?.monitorsByInstance[instance.config.id]).find(Boolean)
+  const form = useForm<MonitorDetailsValues>({
+    values: {
+      name: firstMonitor?.name ?? "",
+      url: typeof firstMonitor?.url === "string" ? firstMonitor.url : "",
+      interval: Number(firstMonitor?.interval ?? 60),
+      retryInterval: Number(firstMonitor?.retryInterval ?? 60),
+      maxretries: Number(firstMonitor?.maxretries ?? 0),
+    },
+  })
+
+  if (!record || !firstMonitor) {
+    return (
+      <Card className="mx-auto w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle>Monitor not found</CardTitle>
+          <CardDescription>No synced monitor exists for <code>{tag}</code>.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={onBack}><ArrowLeft /> Back</Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="mx-auto w-full max-w-3xl">
+      <CardHeader>
+        <div className="mb-2">
+          <Button variant="ghost" onClick={onBack}><ArrowLeft /> Back</Button>
+        </div>
+        <CardTitle className="flex items-center gap-2"><Tags className="size-5" /> {tag}</CardTitle>
+        <CardDescription>Edit shared monitor fields and save them to every instance where this tag exists.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="grid gap-5" onSubmit={form.handleSubmit((values) => onSave(tag, values))}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="monitor-name">Name</FieldLabel>
+              <Input id="monitor-name" {...form.register("name", { required: true })} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="monitor-url">URL</FieldLabel>
+              <Input id="monitor-url" {...form.register("url")} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="monitor-interval">Interval seconds</FieldLabel>
+              <Input id="monitor-interval" type="number" min={1} {...form.register("interval", { valueAsNumber: true })} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="monitor-retry-interval">Retry interval seconds</FieldLabel>
+              <Input id="monitor-retry-interval" type="number" min={1} {...form.register("retryInterval", { valueAsNumber: true })} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="monitor-max-retries">Max retries</FieldLabel>
+              <Input id="monitor-max-retries" type="number" min={0} {...form.register("maxretries", { valueAsNumber: true })} />
+            </Field>
+          </div>
+
+          <div className="rounded-2xl border bg-muted/20 p-4">
+            <div className="mb-3 text-sm font-medium">Instances</div>
+            <div className="grid gap-2">
+              {connectedInstances.map((instance) => {
+                const monitor = record.monitorsByInstance[instance.config.id]
+                return (
+                  <div key={instance.config.id} className="flex items-center justify-between gap-3 rounded-lg bg-background/40 px-3 py-2 text-sm">
+                    <span>{instance.config.name}</span>
+                    {monitor ? <Badge variant="secondary">{monitor.name}</Badge> : <Badge variant="destructive">Missing</Badge>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button type="submit"><Save /> Save to all</Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
 function getPendingTag(customTag: string | undefined, suggestedTag: string | null) {
   return (customTag ?? suggestedTag ?? "").trim()
+}
+
+function stripMonitorPrefix(tag: string) {
+  return tag.startsWith("monitor:") ? tag.slice("monitor:".length) : tag
+}
+
+function getTagSuffix(tag: string | null | undefined) {
+  return stripMonitorPrefix(tag ?? "")
 }
 
 function getInitialRoute(): AppRoute {
   if (window.location.pathname === "/login") return "/login"
   if (window.location.pathname === "/dashboard") return "/dashboard"
+  if (window.location.pathname.startsWith("/monitors/")) return window.location.pathname as AppRoute
   return "/instances"
 }
 
