@@ -143,8 +143,8 @@ function emitWithCallback<Event extends keyof KumaClientEvents>(
       resolve(response)
     }
 
-    const emit = socket.emit as unknown as (eventName: string, ...eventArgs: unknown[]) => void
-    emit(String(event), ...args, callback)
+    const emit = socket.emit as unknown as (this: typeof socket, eventName: string, ...eventArgs: unknown[]) => void
+    emit.call(socket, String(event), ...args, callback)
   })
 }
 

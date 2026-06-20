@@ -282,7 +282,7 @@ function AuthWall({
   onTokenLogin: () => Promise<void>
 }) {
   const [step, setStep] = useState<"instances" | "login">("instances")
-  const instanceForm = useForm<InstanceFormValues>({ resolver: zodResolver(instanceSchema), values: { instances } })
+  const instanceForm = useForm<InstanceFormValues>({ resolver: zodResolver(instanceSchema), defaultValues: { instances } })
   const loginForm = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema), defaultValues: { username: "", password: "" } })
   const { fields, append, remove } = useFieldArray({ control: instanceForm.control, name: "instances" })
   const watchedInstances = instanceForm.watch("instances")
@@ -344,7 +344,11 @@ function AuthWall({
                         variant="ghost"
                         disabled={fields.length === 1}
                         aria-label="Remove instance"
-                        onClick={() => remove(index)}
+                        onClick={() => {
+                          const nextInstances = instanceForm.getValues("instances").filter((_, itemIndex) => itemIndex !== index)
+                          remove(index)
+                          onInstancesChange(nextInstances)
+                        }}
                       >
                         <Trash2 />
                       </Button>
@@ -370,7 +374,12 @@ function AuthWall({
                 <button
                   type="button"
                   className="add-instance-card group grid min-h-64 place-items-center rounded-xl border border-dashed p-6 text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  onClick={() => append({ id: crypto.randomUUID(), name: `Kuma ${fields.length + 1}`, url: "" })}
+                  onClick={() => {
+                    const instance = { id: crypto.randomUUID(), name: `Kuma ${fields.length + 1}`, url: "" }
+                    const nextInstances = [...instanceForm.getValues("instances"), instance]
+                    append(instance)
+                    onInstancesChange(nextInstances)
+                  }}
                 >
                   <span className="grid gap-3 text-center">
                     <span className="add-instance-plus mx-auto grid size-14 place-items-center rounded-full">
