@@ -1,7 +1,7 @@
 import { normalizeWithTokens } from "@/utils/template-tokens"
 import type { ConnectedKumaInstance, KumaStatusPage, StatusPageDifference, StatusPageSettingDiff, StatusPageSyncRecord } from "@/types"
 
-export const STATUS_PAGE_IGNORED_FIELDS = new Set(["id", "publicGroupList", "incidents"])
+export const STATUS_PAGE_IGNORED_FIELDS = new Set(["id", "ok", "publicGroupList", "incidents"])
 
 export function buildStatusPageRecords(instances: ConnectedKumaInstance[]): StatusPageSyncRecord[] {
   const records = new Map<string, StatusPageSyncRecord>()
@@ -34,9 +34,11 @@ export function diffStatusPageRecord(record: StatusPageSyncRecord, instances: Co
 
   const pagesWithInstance = instances.flatMap((instance) => {
     const page = record.pagesByInstance[instance.config.id]
-    return page ? [{ page, instanceName: instance.config.name }] : []
+    return page ? [{ page, instanceName: instance.config.name, instanceUrl: instance.config.url }] : []
   })
-  const [first, ...rest] = pagesWithInstance.map(({ page, instanceName }) => normalizeStatusPageForDiff(page, instanceName))
+  const [first, ...rest] = pagesWithInstance.map(({ page, instanceName, instanceUrl }) =>
+    normalizeStatusPageForDiff(page, instanceName, instanceUrl),
+  )
   const firstJson = JSON.stringify(sortObject(first))
   const different = rest.some((p) => JSON.stringify(sortObject(p)) !== firstJson)
 
@@ -72,7 +74,7 @@ export function getStatusPageSettingDiffs(record: StatusPageSyncRecord, instance
       const page = record.pagesByInstance[instance.config.id]
       if (!page) return []
       const raw = page[field]
-      const normalized = normalizeWithTokens(formatValue(raw), instance.config.name)
+      const normalized = normalizeWithTokens(formatValue(raw), instance.config.name, instance.config.url)
       return {
         instanceName: instance.config.name,
         normalized,
@@ -94,12 +96,12 @@ export function hasStatusPageSettingDiffs(record: StatusPageSyncRecord, instance
   return getStatusPageSettingDiffs(record, instances).length > 0
 }
 
-function normalizeStatusPageForDiff(page: KumaStatusPage, instanceName: string) {
+function normalizeStatusPageForDiff(page: KumaStatusPage, instanceName: string, instanceUrl?: string) {
   const normalized: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(page)) {
     if (STATUS_PAGE_IGNORED_FIELDS.has(key)) continue
     if (typeof value === "string") {
-      normalized[key] = normalizeWithTokens(value, instanceName)
+      normalized[key] = normalizeWithTokens(value, instanceName, instanceUrl)
     } else {
       normalized[key] = value
     }

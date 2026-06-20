@@ -88,10 +88,12 @@ export function diffMonitorRecord(record: MonitorSyncRecord, instances: Connecte
     }
   }
 
-  const monitors = instances.map((instance) => record.monitorsByInstance[instance.config.id]).filter(Boolean)
-  const [first, ...rest] = monitors.map(normalizeMonitorForDiff)
+  const instanceMonitorPairs = instances
+    .map((instance) => ({ instance, monitor: record.monitorsByInstance[instance.config.id] }))
+    .filter((pair): pair is { instance: ConnectedKumaInstance; monitor: KumaMonitor } => Boolean(pair.monitor))
+  const [first, ...rest] = instanceMonitorPairs.map(({ instance, monitor }) => normalizeMonitorForDiff(monitor, instance))
   const firstJson = stableJson(first)
-  const different = rest.some((monitor) => stableJson(monitor) !== firstJson)
+  const different = rest.some((m) => stableJson(m) !== firstJson)
 
   if (!different) return null
 
@@ -103,7 +105,7 @@ export function diffMonitorRecord(record: MonitorSyncRecord, instances: Connecte
   }
 }
 
-export function normalizeMonitorForDiff(monitor: KumaMonitor) {
+export function normalizeMonitorForDiff(monitor: KumaMonitor, instance?: ConnectedKumaInstance) {
   const normalized: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(monitor)) {
@@ -112,6 +114,11 @@ export function normalizeMonitorForDiff(monitor: KumaMonitor) {
       normalized.tags = (monitor.tags ?? [])
         .map((tag) => ({ name: tag.name, value: tag.value ?? null }))
         .sort((a, b) => a.name.localeCompare(b.name))
+      continue
+    }
+    if (key === "parent" && instance && value !== null && value !== undefined) {
+      const group = instance.monitors.find((m) => m.type === "group" && m.id === value)
+      normalized.parent = group?.name ?? null
       continue
     }
     normalized[key] = value

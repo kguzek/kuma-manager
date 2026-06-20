@@ -92,6 +92,24 @@ export function MonitorPage({
 
   const settingDiffs = getMonitorSettingDiffs(record, connectedInstances)
   const diffFieldSet = new Set(settingDiffs.map((d) => d.field))
+
+  function getFieldConflicts(field: string) {
+    if (!record || !diffFieldSet.has(field)) return null
+    const values: { instanceName: string; value: unknown }[] = []
+    for (const instance of connectedInstances) {
+      const monitor = record.monitorsByInstance[instance.config.id]
+      if (!monitor) continue
+      values.push({ instanceName: instance.config.name, value: monitor[field] })
+    }
+    const unique = new Set(values.map((v) => JSON.stringify(v.value)))
+    if (unique.size <= 1) return null
+    return values
+  }
+
+  function handleApplyConflictValue(field: string, value: unknown) {
+    form.setValue(field, value as never)
+    void form.handleSubmit((values) => onSave(tag, values, selectedGroup || undefined))()
+  }
   const structuralDiff = diffMonitorRecord(record, connectedInstances)
   const pendingTag = `monitor:${tagSuffixInput.trim()}`
 
@@ -143,6 +161,25 @@ export function MonitorPage({
     const value = monitor[field]
     const label = getFieldLabel(field)
     const isDiff = diffFieldSet.has(field)
+    const conflicts = getFieldConflicts(field)
+
+    function conflictBadges() {
+      if (!conflicts) return null
+      return (
+        <div className="-mb-1 flex flex-wrap gap-1">
+          {conflicts.map((c) => (
+            <button
+              key={c.instanceName}
+              type="button"
+              onClick={() => handleApplyConflictValue(field, c.value)}
+              className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400 transition-colors hover:bg-amber-500/20"
+            >
+              {c.instanceName}: {String(c.value)}
+            </button>
+          ))}
+        </div>
+      )
+    }
 
     if (typeof value === "boolean") {
       return (
@@ -159,6 +196,7 @@ export function MonitorPage({
       return (
         <Field key={field}>
           <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
+          {conflictBadges()}
           <Input
             id={`monitor-${field}`}
             type="number"
@@ -187,6 +225,7 @@ export function MonitorPage({
     return (
       <Field key={field}>
         <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
+        {conflictBadges()}
         <Input id={`monitor-${field}`} style={isDiff ? { borderColor: "#eab308" } : undefined} {...form.register(field)} />
       </Field>
     )

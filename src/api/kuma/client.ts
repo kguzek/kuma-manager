@@ -39,6 +39,7 @@ type KumaClientEvents = {
   addMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
   deleteMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
   // Status page events
+  getStatusPage: (slug: string, callback: (response: unknown) => void) => void
   getStatusPages: (callback: (response: unknown) => void) => void
   addStatusPage: (page: Partial<KumaStatusPage>, callback: (response: KumaCommandResult) => void) => void
   editStatusPage: (page: KumaStatusPage, callback: (response: KumaCommandResult) => void) => void
@@ -70,6 +71,7 @@ export type KumaApiClient = {
   addMonitorTag: (monitorID: number, tagName: string, color?: string) => Promise<KumaCommandResult>
   deleteMonitorTag: (monitorID: number, tagID: number, value?: string | null) => Promise<KumaCommandResult>
   replaceMonitorTag: (monitor: KumaMonitor, oldTagName: string, newTagName: string, color?: string) => Promise<KumaCommandResult>
+  getStatusPage: (slug: string) => Promise<KumaStatusPage | null>
   getStatusPages: () => Promise<KumaStatusPage[]>
   addStatusPage: (page: Partial<KumaStatusPage>) => Promise<KumaCommandResult>
   editStatusPage: (page: KumaStatusPage) => Promise<KumaCommandResult>
@@ -157,6 +159,23 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
       if (!tag?.id) return { ok: false, msg: `Failed to create tag ${newTagName}` }
 
       return emitWithCallback(socket, "addMonitorTag", tag.id, monitor.id, null)
+    },
+    getStatusPage: async (slug) => {
+      try {
+        const result = await emitWithCallback(socket, "getStatusPage", slug)
+        if (result && typeof result === "object") {
+          const data = result as Record<string, unknown>
+          const config = data.config as Record<string, unknown> | undefined
+          if (config) {
+            delete data.config
+            return { ...config, ...data } as KumaStatusPage
+          }
+          return data as KumaStatusPage
+        }
+      } catch {
+        /* event not supported by this Kuma version */
+      }
+      return null
     },
     getStatusPages: async () => {
       if (Object.keys(statusPageList).length > 0) return Object.values(statusPageList)

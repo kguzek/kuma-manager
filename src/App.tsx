@@ -70,6 +70,29 @@ export default function App() {
   const unmanagedMonitors = useMemo(() => getUnmanagedMonitors(connectedInstances), [connectedInstances])
   const monitorGroups = useMemo(() => getMonitorGroupViews(connectedInstances), [connectedInstances])
 
+  const monitorToStatusPages = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const instance of connectedInstances) {
+      for (const page of instance.statusPages ?? []) {
+        const slug = page.slug || `page-${page.id}`
+        for (const group of page.publicGroupList ?? []) {
+          for (const pm of group.monitorList ?? []) {
+            for (const record of monitorRecords) {
+              const monitor = record.monitorsByInstance[instance.config.id]
+              if (monitor && monitor.id === pm.id) {
+                const existing = map.get(record.tag) ?? []
+                if (!existing.includes(slug)) {
+                  map.set(record.tag, [...existing, slug])
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return map
+  }, [connectedInstances, monitorRecords])
+
   useEffect(() => {
     saveInstances(instances)
   }, [instances])
@@ -169,7 +192,7 @@ export default function App() {
   }
 
   async function refreshMonitors() {
-    setStatusMessage("Refreshing monitor configuration...")
+    setStatusMessage("Refreshing data...")
     setErrorMessage(null)
 
     try {
@@ -183,7 +206,7 @@ export default function App() {
         }),
       )
       setConnectedInstances(refreshed)
-      setStatusMessage("Monitor list refreshed.")
+      setStatusMessage("Data refreshed.")
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Refresh failed")
     }
@@ -220,9 +243,12 @@ export default function App() {
         if (targetInstance.config.id === sourceInstanceId) continue
         const client = clientsRef.current[targetInstance.config.id]
         const target = record.monitorsByInstance[targetInstance.config.id]
-        const response = target
-          ? await client.editMonitor(prepareMonitorForEdit(source, target))
-          : await client.addMonitor(prepareMonitorForCreate(source))
+        const editData = target ? prepareMonitorForEdit(source, target) : prepareMonitorForCreate(source)
+        if (editData.parent !== undefined && editData.parent !== null) {
+          const parentExists = targetInstance.monitors.some((m) => m.id === editData.parent)
+          if (!parentExists) editData.parent = null
+        }
+        const response = target ? await client.editMonitor(editData as KumaMonitor) : await client.addMonitor(editData)
         if (!response.ok) throw new Error(`${targetInstance.config.name}: ${response.msg ?? "sync failed"}`)
       }
       await refreshMonitors()
@@ -264,20 +290,32 @@ export default function App() {
     setStatusMessage(`Saving ${tag}...`)
     setErrorMessage(null)
 
+    const errors: string[] = []
+
     try {
       for (const instance of connectedInstances) {
         const monitor = record.monitorsByInstance[instance.config.id]
         if (!monitor) continue
 
-        const instanceValues = { ...values }
+        const instanceValues: Record<string, unknown> = { ...values }
         if (groupName !== undefined) {
           const group = monitorGroups.find((g) => g.instance.config.id === instance.config.id && g.group.name === groupName)
           instanceValues.parent = group?.group.id ?? null
+        } else {
+          instanceValues.parent = null
         }
 
-        const response = await clientsRef.current[instance.config.id].editMonitor({ ...monitor, ...instanceValues })
+        const payload = { ...monitor, ...instanceValues }
 
-        if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "save failed"}`)
+        const response = await clientsRef.current[instance.config.id].editMonitor(payload as KumaMonitor)
+
+        if (!response.ok) {
+          errors.push(`${instance.config.name}: ${response.msg ?? "save failed"}`)
+        }
+      }
+
+      if (errors.length > 0) {
+        throw new Error(errors.join("; "))
       }
 
       setConnectedInstances((current) =>
@@ -372,22 +410,36 @@ export default function App() {
     setStatusMessage(`Saving status page ${slug}...`)
     setErrorMessage(null)
 
+    const errors: string[] = []
+
     try {
       for (const instance of connectedInstances) {
         const page = record.pagesByInstance[instance.config.id]
         if (!page) continue
 
-        const instanceValues: StatusPageDetailsValues = {}
+        const instanceValues: Record<string, unknown> = {}
         for (const [key, val] of Object.entries(values)) {
           if (TEMPLATE_SUPPORTED_FIELDS.has(key) && typeof val === "string") {
-            instanceValues[key] = resolveTokens(val, instance.config.name)
+            instanceValues[key] = resolveTokens(val, instance.config.name, instance.config.url)
           } else {
             instanceValues[key] = val
           }
         }
 
-        const response = await clientsRef.current[instance.config.id].editStatusPage({ ...page, ...instanceValues })
-        if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "save failed"}`)
+        const cleanPage = { ...page }
+        delete (cleanPage as Record<string, unknown>).publicGroupList
+        delete (cleanPage as Record<string, unknown>).incidents
+        delete (cleanPage as Record<string, unknown>).config
+        const payload = { ...cleanPage, ...instanceValues }
+
+        const response = await clientsRef.current[instance.config.id].editStatusPage(payload as KumaStatusPage)
+        if (!response.ok) {
+          errors.push(`${instance.config.name}: ${response.msg ?? "save failed"}`)
+        }
+      }
+
+      if (errors.length > 0) {
+        throw new Error(errors.join("; "))
       }
 
       await refreshStatusPages()
@@ -408,7 +460,7 @@ export default function App() {
         const instanceValues: StatusPageDetailsValues = {}
         for (const [key, val] of Object.entries(values)) {
           if (TEMPLATE_SUPPORTED_FIELDS.has(key) && typeof val === "string") {
-            instanceValues[key] = resolveTokens(val, instance.config.name)
+            instanceValues[key] = resolveTokens(val, instance.config.name, instance.config.url)
           } else {
             instanceValues[key] = val
           }
@@ -424,6 +476,60 @@ export default function App() {
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Create failed")
     }
+  }
+
+  async function fetchStatusPageDetail(slug: string, instanceId: string) {
+    const client = clientsRef.current[instanceId]
+    if (!client) return null
+    const detail = await client.getStatusPage(slug)
+    if (!detail) return null
+    setConnectedInstances((current) =>
+      current.map((instance) => {
+        if (instance.config.id !== instanceId) return instance
+        return {
+          ...instance,
+          statusPages: instance.statusPages?.map((page) => (page.slug === slug ? detail : page)),
+        }
+      }),
+    )
+    return detail
+  }
+
+  async function addPublicGroupToInstance(slug: string, instanceId: string, pageId: number, name: string) {
+    const client = clientsRef.current[instanceId]
+    if (!client) return { ok: false, msg: "No client" }
+    const result = await client.addPublicGroup(pageId, name)
+    if (result.ok) await fetchStatusPageDetail(slug, instanceId)
+    return result
+  }
+
+  async function renamePublicGroupOnInstance(slug: string, instanceId: string, groupId: number, name: string) {
+    const client = clientsRef.current[instanceId]
+    if (!client) return { ok: false, msg: "No client" }
+    const result = await client.renamePublicGroup(groupId, name)
+    if (result.ok) await fetchStatusPageDetail(slug, instanceId)
+    return result
+  }
+
+  async function deletePublicGroupFromInstance(slug: string, instanceId: string, groupId: number) {
+    const client = clientsRef.current[instanceId]
+    if (!client) return { ok: false, msg: "No client" }
+    const result = await client.deletePublicGroup(groupId)
+    if (result.ok) await fetchStatusPageDetail(slug, instanceId)
+    return result
+  }
+
+  async function setPublicGroupMonitorsOnInstance(
+    slug: string,
+    instanceId: string,
+    groupId: number,
+    monitorList: Array<{ id: number; name?: string; sendUrl?: boolean }>,
+  ) {
+    const client = clientsRef.current[instanceId]
+    if (!client) return { ok: false, msg: "No client" }
+    const result = await client.setPublicGroupMonitors(groupId, monitorList)
+    if (result.ok) await fetchStatusPageDetail(slug, instanceId)
+    return result
   }
 
   async function deleteStatusPageFromAll(slug: string) {
@@ -487,7 +593,7 @@ export default function App() {
   return (
     <main className="dot-grid-bg flex min-h-svh flex-col px-4 py-6 text-foreground sm:px-6 lg:px-10">
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6">
-        <AppHeader sessionState={sessionState} onLogout={logout} />
+        <AppHeader sessionState={sessionState} onLogout={logout} onRefresh={refreshMonitors} />
         <div className="flex flex-1 flex-col gap-6">
           {(statusMessage || errorMessage) && (
             <div className={`${alertWidthClass} grid gap-3`}>
@@ -529,6 +635,7 @@ export default function App() {
               monitorRecords={monitorRecords}
               unmanagedMonitors={unmanagedMonitors}
               monitorGroups={monitorGroups}
+              monitorToStatusPages={monitorToStatusPages}
               onSyncFrom={syncFrom}
               onApplySuggestedTag={applySuggestedTag}
               onRefresh={refreshMonitors}
@@ -543,6 +650,11 @@ export default function App() {
               onNavigate={navigate}
               onSave={saveStatusPageDetails}
               onDelete={deleteStatusPageFromAll}
+              onFetchStatusPageDetail={fetchStatusPageDetail}
+              onAddPublicGroup={addPublicGroupToInstance}
+              onRenamePublicGroup={renamePublicGroupOnInstance}
+              onDeletePublicGroup={deletePublicGroupFromInstance}
+              onSetPublicGroupMonitors={setPublicGroupMonitorsOnInstance}
             />
           ) : route === "/status-pages" ? (
             <StatusPagesPage

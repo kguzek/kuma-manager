@@ -1,5 +1,5 @@
 import { Fragment } from "react"
-import { AlertCircle, ArrowRight, Check, CheckCircle2 } from "lucide-react"
+import { AlertCircle, ArrowRight, Check, CheckCircle2, ExternalLink } from "lucide-react"
 
 import { RouteLink } from "@/components/navigation/RouteLink"
 import { Badge } from "@/components/ui/badge"
@@ -15,16 +15,25 @@ type DiffTableRowGroupProps = {
   records: MonitorSyncRecord[]
   connectedInstances: ConnectedKumaInstance[]
   differences: MonitorDifference[]
+  monitorToStatusPages: Map<string, string[]>
   onNavigate: (route: AppRoute) => void
   onSyncFrom: (sourceInstanceId: string, tag: string) => Promise<void>
 }
 
-export function DiffTableRowGroup({ groupName, records, connectedInstances, differences, onNavigate, onSyncFrom }: DiffTableRowGroupProps) {
+export function DiffTableRowGroup({
+  groupName,
+  records,
+  connectedInstances,
+  differences,
+  monitorToStatusPages,
+  onNavigate,
+  onSyncFrom,
+}: DiffTableRowGroupProps) {
   return (
     <>
       <TableRow className="bg-muted/40 hover:bg-muted/40">
         <TableCell
-          colSpan={connectedInstances.length + 3}
+          colSpan={connectedInstances.length + 4}
           className="py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
         >
           {groupName}
@@ -33,6 +42,7 @@ export function DiffTableRowGroup({ groupName, records, connectedInstances, diff
       {records.map((record) => {
         const diff = differences.find((entry) => entry.tag === record.tag)
         const settingDiffs = getMonitorSettingDiffs(record, connectedInstances)
+        const statusPages = monitorToStatusPages.get(record.tag) ?? []
         return (
           <Fragment key={record.tag}>
             <TableRow key={record.tag}>
@@ -51,6 +61,21 @@ export function DiffTableRowGroup({ groupName, records, connectedInstances, diff
                   </TableCell>
                 )
               })}
+              <TableCell>
+                {statusPages.length > 0 ? (
+                  <div className="flex flex-col gap-0.5">
+                    {statusPages.map((sp) => (
+                      <Button key={sp} variant="link" className="h-auto p-0 text-xs" asChild>
+                        <RouteLink href={`/status-pages/${encodeURIComponent(sp)}`} onNavigate={onNavigate}>
+                          <ExternalLink className="mr-0.5 size-3" /> {sp}
+                        </RouteLink>
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </TableCell>
               <TableCell>
                 {settingDiffs.length > 0 ? (
                   <Badge variant="destructive">
@@ -86,7 +111,7 @@ export function DiffTableRowGroup({ groupName, records, connectedInstances, diff
             </TableRow>
             {settingDiffs.length > 0 && (
               <TableRow key={`${record.tag}-diff`}>
-                <TableCell colSpan={connectedInstances.length + 3}>
+                <TableCell colSpan={connectedInstances.length + 4}>
                   <SettingsDiff diffs={settingDiffs} />
                 </TableCell>
               </TableRow>

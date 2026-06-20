@@ -13,6 +13,7 @@ type MonitorsPageProps = {
   monitorRecords: MonitorSyncRecord[]
   unmanagedMonitors: ReturnType<typeof getUnmanagedMonitors>
   monitorGroups: ReturnType<typeof getMonitorGroupViews>
+  monitorToStatusPages: Map<string, string[]>
   onSyncFrom: (sourceInstanceId: string, tag: string) => Promise<void>
   onApplySuggestedTag: (instanceId: string, monitor: KumaMonitor, tag: string) => Promise<void>
   onRefresh: () => Promise<void>
@@ -25,6 +26,7 @@ export function MonitorsPage({
   monitorRecords,
   unmanagedMonitors,
   monitorGroups,
+  monitorToStatusPages,
   onSyncFrom,
   onApplySuggestedTag,
   onRefresh,
@@ -64,6 +66,7 @@ export function MonitorsPage({
         differences={differences}
         monitorRecords={monitorRecords}
         monitorGroups={monitorGroups}
+        monitorToStatusPages={monitorToStatusPages}
         onSyncFrom={onSyncFrom}
         onRefresh={onRefresh}
         onNavigate={onNavigate}

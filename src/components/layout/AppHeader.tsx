@@ -1,4 +1,5 @@
-import { LogOut } from "lucide-react"
+import { useCallback, useState } from "react"
+import { LogOut, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { SessionState } from "@/types"
@@ -6,9 +7,21 @@ import type { SessionState } from "@/types"
 type AppHeaderProps = {
   sessionState: SessionState
   onLogout: () => void
+  onRefresh: () => Promise<void>
 }
 
-export function AppHeader({ sessionState, onLogout }: AppHeaderProps) {
+export function AppHeader({ sessionState, onLogout, onRefresh }: AppHeaderProps) {
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      await onRefresh()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [onRefresh])
+
   return (
     <header
       className={`flex flex-col justify-between gap-4 py-4 ${sessionState === "authenticated" ? "md:flex-row md:items-center" : "items-center text-center"}`}
@@ -27,6 +40,10 @@ export function AppHeader({ sessionState, onLogout }: AppHeaderProps) {
       </div>
       {sessionState === "authenticated" && (
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={isRefreshing} onClick={handleRefresh}>
+            <RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
           <Button variant="destructive" onClick={onLogout}>
             <LogOut /> Log out
           </Button>
