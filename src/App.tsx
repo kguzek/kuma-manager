@@ -369,11 +369,11 @@ function AuthWall({
 
                 <button
                   type="button"
-                  className="group grid min-h-64 place-items-center rounded-xl border border-dashed border-input bg-card/40 p-6 text-muted-foreground transition hover:border-primary/50 hover:bg-card/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="add-instance-card group grid min-h-64 place-items-center rounded-xl border border-dashed p-6 text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                   onClick={() => append({ id: crypto.randomUUID(), name: `Kuma ${fields.length + 1}`, url: "" })}
                 >
                   <span className="grid gap-3 text-center">
-                    <span className="mx-auto grid size-14 place-items-center rounded-full bg-muted transition group-hover:bg-primary group-hover:text-primary-foreground">
+                    <span className="add-instance-plus mx-auto grid size-14 place-items-center rounded-full">
                       <Plus className="size-7" />
                     </span>
                     <span className="text-sm font-medium">Add instance</span>
