@@ -18,7 +18,7 @@ export function SettingsDiff({ diffs, emptyMessage = "No setting differences.", 
       {diffs.map((diff) => (
         <div key={diff.field} className="border-b last:border-b-0">
           <div className="flex items-center justify-between bg-muted/50 px-3 py-2 text-muted-foreground">
-            <span>@@ {getFieldLabel(diff.field)} @@</span>
+            <span>Setting name: {getFieldLabel(diff.field)}</span>
             {onShowField && (
               <Button
                 type="button"

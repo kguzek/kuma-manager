@@ -17,9 +17,11 @@ export function StatusCard({ message, tone, onDismiss }: StatusCardProps) {
     >
       <Icon className={`mt-0.5 size-4 ${tone === "loading" ? "animate-spin" : ""}`} />
       <div className="min-w-0 flex-1">{message}</div>
-      <Button size="sm" variant="ghost" className="-my-1" onClick={onDismiss}>
-        Dismiss
-      </Button>
+      {tone !== "loading" && (
+        <Button size="sm" variant="ghost" className="-my-1" onClick={onDismiss}>
+          Dismiss
+        </Button>
+      )}
     </div>
   )
 }

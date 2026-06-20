@@ -163,7 +163,7 @@ export default function App() {
         })),
       )
       setConnectedInstances(refreshed)
-      setStatusMessage("Monitor configuration refreshed.")
+      setStatusMessage("Monitor list refreshed.")
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Refresh failed")
     }
@@ -405,6 +405,7 @@ export default function App() {
               monitorGroups={monitorGroups}
               onSyncFrom={syncFrom}
               onApplySuggestedTag={applySuggestedTag}
+              onRefresh={refreshMonitors}
               onNavigate={navigate}
             />
           )}

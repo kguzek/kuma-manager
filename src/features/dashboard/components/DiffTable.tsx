@@ -1,5 +1,19 @@
-import { useState } from "react"
-import { ArrowRightLeft, Plus } from "lucide-react"
+import { useCallback, useState } from "react"
+import {
+  AlertCircle,
+  ArrowRightLeft,
+  CheckCircle2,
+  Grid2x2,
+  List,
+  Plus,
+  RefreshCw,
+  SplitSquareHorizontal,
+  SplitSquareVertical,
+  SquareCenterlineDashedHorizontal,
+  SquareCheck,
+  SquareEqual,
+  SquareSlash,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { RouteLink } from "@/components/navigation/RouteLink"
@@ -17,12 +31,32 @@ type DiffTableProps = {
   monitorRecords: MonitorSyncRecord[]
   monitorGroups: ReturnType<typeof getMonitorGroupViews>
   onSyncFrom: (sourceInstanceId: string, tag: string) => Promise<void>
+  onRefresh: () => Promise<void>
   onNavigate: (route: AppRoute) => void
 }
 
-export function DiffTable({ connectedInstances, differences, monitorRecords, monitorGroups, onSyncFrom, onNavigate }: DiffTableProps) {
+export function DiffTable({
+  connectedInstances,
+  differences,
+  monitorRecords,
+  monitorGroups,
+  onSyncFrom,
+  onRefresh,
+  onNavigate,
+}: DiffTableProps) {
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<"all" | "diff" | "sync">("all")
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    try {
+      await onRefresh()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [onRefresh])
   const filteredRecords = monitorRecords.filter((record) => {
     const haystack = [
       record.tag,
@@ -35,7 +69,7 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
     const matchesFilter = filter === "all" || (filter === "diff" ? hasDiff : !hasDiff)
     return matchesSearch && matchesFilter
   })
-  const groupedRecords = groupRecordsByMonitorGroup(filteredRecords, monitorGroups)
+  const groupedRecords = groupRecordsByMonitorGroup(filteredRecords, monitorGroups, differences, connectedInstances)
 
   return (
     <Card>
@@ -44,11 +78,17 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
           <CardTitle className="flex items-center gap-2">
             <ArrowRightLeft className="size-5" /> Diff page
           </CardTitle>
-          <Button size="sm" variant="outline" asChild>
-            <RouteLink href="/monitors/new" onNavigate={onNavigate}>
-              <Plus /> New monitor
-            </RouteLink>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={isRefreshing} onClick={handleRefresh}>
+              <RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <RouteLink href="/monitors/new" onNavigate={onNavigate}>
+                <Plus /> New monitor
+              </RouteLink>
+            </Button>
+          </div>
         </div>
         <CardDescription>
           Only monitors with at least one <code>monitor:</code> tag are compared. History, current status, ping, cert info, and IDs are
@@ -59,19 +99,19 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <Input
             className="md:max-w-sm"
-            placeholder="Search tag, name, or URL..."
+            placeholder="Search tag, name, or URL"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>
-              All
+              <Grid2x2 className="size-4" /> All
             </Button>
             <Button size="sm" variant={filter === "diff" ? "default" : "outline"} onClick={() => setFilter("diff")}>
-              Changed
+              <SquareCenterlineDashedHorizontal className="size-4" /> Changed
             </Button>
             <Button size="sm" variant={filter === "sync" ? "default" : "outline"} onClick={() => setFilter("sync")}>
-              In sync
+              <SquareEqual className="size-4" /> In sync
             </Button>
           </div>
         </div>
@@ -125,7 +165,12 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
   )
 }
 
-function groupRecordsByMonitorGroup(records: MonitorSyncRecord[], monitorGroups: ReturnType<typeof getMonitorGroupViews>) {
+function groupRecordsByMonitorGroup(
+  records: MonitorSyncRecord[],
+  monitorGroups: ReturnType<typeof getMonitorGroupViews>,
+  differences: MonitorDifference[],
+  connectedInstances: ConnectedKumaInstance[],
+) {
   const groups = new Map<string, MonitorSyncRecord[]>()
 
   for (const record of records) {
@@ -133,7 +178,15 @@ function groupRecordsByMonitorGroup(records: MonitorSyncRecord[], monitorGroups:
     groups.set(groupName, [...(groups.get(groupName) ?? []), record])
   }
 
-  return [...groups.entries()].map(([groupName, groupedRecords]) => ({ groupName, records: groupedRecords }))
+  return [...groups.entries()].map(([groupName, groupedRecords]) => ({
+    groupName,
+    records: [...groupedRecords].sort((a, b) => {
+      const aDiff = differences.some((d) => d.tag === a.tag) || hasMonitorSettingDiffs(a, connectedInstances)
+      const bDiff = differences.some((d) => d.tag === b.tag) || hasMonitorSettingDiffs(b, connectedInstances)
+      if (aDiff !== bDiff) return aDiff ? -1 : 1
+      return a.tag.localeCompare(b.tag)
+    }),
+  }))
 }
 
 function findRecordGroupName(record: MonitorSyncRecord, monitorGroups: ReturnType<typeof getMonitorGroupViews>) {

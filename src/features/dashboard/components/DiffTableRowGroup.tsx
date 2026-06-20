@@ -1,5 +1,5 @@
 import { Fragment } from "react"
-import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react"
+import { AlertCircle, ArrowRight, Check, CheckCircle2 } from "lucide-react"
 
 import { RouteLink } from "@/components/navigation/RouteLink"
 import { Badge } from "@/components/ui/badge"
@@ -76,7 +76,7 @@ export function DiffTableRowGroup({ groupName, records, connectedInstances, diff
                             variant="outline"
                             onClick={() => onSyncFrom(instance.config.id, record.tag)}
                           >
-                            Use {instance.config.name}
+                            <Check className="size-4" /> Use {instance.config.name}
                           </Button>
                         ),
                     )}

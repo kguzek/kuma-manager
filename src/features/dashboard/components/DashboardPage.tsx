@@ -12,6 +12,7 @@ type DashboardPageProps = {
   monitorGroups: ReturnType<typeof getMonitorGroupViews>
   onSyncFrom: (sourceInstanceId: string, tag: string) => Promise<void>
   onApplySuggestedTag: (instanceId: string, monitor: KumaMonitor, tag: string) => Promise<void>
+  onRefresh: () => Promise<void>
   onNavigate: (route: AppRoute) => void
 }
 
@@ -23,6 +24,7 @@ export function DashboardPage({
   monitorGroups,
   onSyncFrom,
   onApplySuggestedTag,
+  onRefresh,
   onNavigate,
 }: DashboardPageProps) {
   return (
@@ -43,6 +45,7 @@ export function DashboardPage({
         monitorRecords={monitorRecords}
         monitorGroups={monitorGroups}
         onSyncFrom={onSyncFrom}
+        onRefresh={onRefresh}
         onNavigate={onNavigate}
       />
       <UnmanagedMonitorsCard unmanagedMonitors={unmanagedMonitors} onApplySuggestedTag={onApplySuggestedTag} />
