@@ -17,7 +17,7 @@ export function AppHeader({ sessionState, onLogout }: AppHeaderProps) {
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Kuma Manager</h1>
         {sessionState === "authenticated" ? (
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
-            Comparing monitor config by <code className="rounded bg-muted px-1 py-0.5">monitor:</code> tags.
+            Consistent monitoring configurations across all your Kuma instances.
           </p>
         ) : (
           <p className="mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">

@@ -1,11 +1,21 @@
 import { io, type Socket } from "socket.io-client"
 
-import type { KumaCommandResult, KumaInstanceConfig, KumaLoginResult, KumaMonitor, KumaTagListResult } from "@/types"
+import type {
+  KumaCommandResult,
+  KumaIncident,
+  KumaInstanceConfig,
+  KumaLoginResult,
+  KumaMonitor,
+  KumaStatusPage,
+  KumaTagListResult,
+  PublicGroup,
+} from "@/types"
 
 type KumaServerEvents = {
   monitorList: (payload: Record<string, KumaMonitor>) => void
   updateMonitorIntoList: (payload: Record<string, KumaMonitor>) => void
   deleteMonitorFromList: (monitorID: number) => void
+  statusPageList: (payload: Record<string, KumaStatusPage>) => void
   connect_error: (error: Error) => void
 }
 
@@ -28,6 +38,24 @@ type KumaClientEvents = {
   ) => void
   addMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
   deleteMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
+  // Status page events
+  getStatusPages: (callback: (response: unknown) => void) => void
+  addStatusPage: (page: Partial<KumaStatusPage>, callback: (response: KumaCommandResult) => void) => void
+  editStatusPage: (page: KumaStatusPage, callback: (response: KumaCommandResult) => void) => void
+  deleteStatusPage: (pageID: number, callback: (response: KumaCommandResult) => void) => void
+  addIncident: (pageID: number, incident: Partial<KumaIncident>, callback: (response: KumaCommandResult) => void) => void
+  editIncident: (incident: KumaIncident, callback: (response: KumaCommandResult) => void) => void
+  deleteIncident: (incidentID: number, callback: (response: KumaCommandResult) => void) => void
+  addPublicGroup: (pageID: number, name: string, callback: (response: KumaCommandResult) => void) => void
+  editPublicGroup: (groupID: number, group: Partial<PublicGroup>, callback: (response: KumaCommandResult) => void) => void
+  deletePublicGroup: (groupID: number, callback: (response: KumaCommandResult) => void) => void
+  renamePublicGroup: (groupID: number, name: string, callback: (response: KumaCommandResult) => void) => void
+  setPublicGroupMonitors: (
+    groupID: number,
+    monitorList: Array<{ id: number; name?: string; sendUrl?: boolean }>,
+    callback: (response: KumaCommandResult) => void,
+  ) => void
+  rearrangePublicGroup: (groupIDs: number[], callback: (response: KumaCommandResult) => void) => void
 }
 
 export type KumaApiClient = {
@@ -42,6 +70,22 @@ export type KumaApiClient = {
   addMonitorTag: (monitorID: number, tagName: string, color?: string) => Promise<KumaCommandResult>
   deleteMonitorTag: (monitorID: number, tagID: number, value?: string | null) => Promise<KumaCommandResult>
   replaceMonitorTag: (monitor: KumaMonitor, oldTagName: string, newTagName: string, color?: string) => Promise<KumaCommandResult>
+  getStatusPages: () => Promise<KumaStatusPage[]>
+  addStatusPage: (page: Partial<KumaStatusPage>) => Promise<KumaCommandResult>
+  editStatusPage: (page: KumaStatusPage) => Promise<KumaCommandResult>
+  deleteStatusPage: (pageID: number) => Promise<KumaCommandResult>
+  addIncident: (pageID: number, incident: Partial<KumaIncident>) => Promise<KumaCommandResult>
+  editIncident: (incident: KumaIncident) => Promise<KumaCommandResult>
+  deleteIncident: (incidentID: number) => Promise<KumaCommandResult>
+  addPublicGroup: (pageID: number, name: string) => Promise<KumaCommandResult>
+  editPublicGroup: (groupID: number, group: Partial<PublicGroup>) => Promise<KumaCommandResult>
+  deletePublicGroup: (groupID: number) => Promise<KumaCommandResult>
+  renamePublicGroup: (groupID: number, name: string) => Promise<KumaCommandResult>
+  setPublicGroupMonitors: (
+    groupID: number,
+    monitorList: Array<{ id: number; name?: string; sendUrl?: boolean }>,
+  ) => Promise<KumaCommandResult>
+  rearrangePublicGroup: (groupIDs: number[]) => Promise<KumaCommandResult>
   disconnect: () => void
 }
 
@@ -56,6 +100,7 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
   })
 
   let monitorList: Record<string, KumaMonitor> = {}
+  let statusPageList: Record<string, KumaStatusPage> = {}
 
   socket.on("monitorList", (payload) => {
     monitorList = payload
@@ -69,6 +114,10 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
     const next = { ...monitorList }
     delete next[String(monitorID)]
     monitorList = next
+  })
+
+  socket.on("statusPageList", (payload) => {
+    statusPageList = payload
   })
 
   return {
@@ -109,6 +158,35 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
 
       return emitWithCallback(socket, "addMonitorTag", tag.id, monitor.id, null)
     },
+    getStatusPages: async () => {
+      if (Object.keys(statusPageList).length > 0) return Object.values(statusPageList)
+      try {
+        const result = await emitWithCallback(socket, "getStatusPages")
+        if (Array.isArray(result)) return result as KumaStatusPage[]
+        if (result && typeof result === "object") {
+          const pages: KumaStatusPage[] = []
+          for (const [, value] of Object.entries(result as Record<string, unknown>)) {
+            if (typeof value === "object" && value !== null) pages.push(value as KumaStatusPage)
+          }
+          if (pages.length > 0) return pages
+        }
+      } catch {
+        /* event not supported by this Kuma version */
+      }
+      return waitForStatusPageList(socket)
+    },
+    addStatusPage: (page) => emitWithCallback(socket, "addStatusPage", page),
+    editStatusPage: (page) => emitWithCallback(socket, "editStatusPage", page),
+    deleteStatusPage: (pageID) => emitWithCallback(socket, "deleteStatusPage", pageID),
+    addIncident: (pageID, incident) => emitWithCallback(socket, "addIncident", pageID, incident),
+    editIncident: (incident) => emitWithCallback(socket, "editIncident", incident),
+    deleteIncident: (incidentID) => emitWithCallback(socket, "deleteIncident", incidentID),
+    addPublicGroup: (pageID, name) => emitWithCallback(socket, "addPublicGroup", pageID, name),
+    editPublicGroup: (groupID, group) => emitWithCallback(socket, "editPublicGroup", groupID, group),
+    deletePublicGroup: (groupID) => emitWithCallback(socket, "deletePublicGroup", groupID),
+    renamePublicGroup: (groupID, name) => emitWithCallback(socket, "renamePublicGroup", groupID, name),
+    setPublicGroupMonitors: (groupID, monitorList) => emitWithCallback(socket, "setPublicGroupMonitors", groupID, monitorList),
+    rearrangePublicGroup: (groupIDs) => emitWithCallback(socket, "rearrangePublicGroup", groupIDs),
     disconnect: () => socket.disconnect(),
   }
 }
@@ -186,6 +264,22 @@ function waitForMonitorList(socket: Socket<KumaServerEvents, KumaClientEvents>) 
     }
 
     socket.once("monitorList", onMonitorList)
+  })
+}
+
+function waitForStatusPageList(socket: Socket<KumaServerEvents, KumaClientEvents>) {
+  return new Promise<KumaStatusPage[]>((resolve) => {
+    const timeout = window.setTimeout(() => {
+      socket.off("statusPageList", onList)
+      resolve([])
+    }, 8_000)
+
+    const onList = (payload: Record<string, KumaStatusPage>) => {
+      window.clearTimeout(timeout)
+      resolve(payload ? Object.values(payload) : [])
+    }
+
+    socket.once("statusPageList", onList)
   })
 }
 

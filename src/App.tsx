@@ -5,8 +5,11 @@ import { AppFooter } from "@/components/layout/AppFooter"
 import { StatusCard } from "@/components/layout/StatusCard"
 import { AuthFlow } from "@/features/auth/components/AuthFlow"
 import { DashboardPage } from "@/features/dashboard/components/DashboardPage"
+import { MonitorsPage } from "@/features/monitors/components/MonitorsPage"
 import { CreateMonitorPage } from "@/features/monitors/components/CreateMonitorPage"
 import { MonitorPage } from "@/features/monitors/components/MonitorPage"
+import { StatusPagesPage } from "@/features/status-pages/components/StatusPagesPage"
+import { StatusPageDetailPage } from "@/features/status-pages/components/StatusPageDetailPage"
 import { useAppRoute } from "@/hooks/useAppRoute"
 import { createKumaApiClient } from "@/api/kuma/client"
 import {
@@ -17,16 +20,21 @@ import {
   prepareMonitorForCreate,
   prepareMonitorForEdit,
 } from "@/features/monitors/utils/monitor-sync"
+import { buildStatusPageRecords, diffStatusPageRecord } from "@/features/status-pages/utils/status-page-sync"
 import { clearTokens, loadInstances, loadTokens, saveInstances, saveTokens } from "@/utils/storage"
+import { resolveTokens, TEMPLATE_SUPPORTED_FIELDS } from "@/utils/template-tokens"
 import type { KumaApiClient } from "@/api/kuma/client"
 import type {
   ConnectedKumaInstance,
   KumaInstanceConfig,
   KumaMonitor,
+  KumaStatusPage,
   LoginCredentials,
   MonitorDetailsValues,
   MonitorDifference,
   SessionState,
+  StatusPageDetailsValues,
+  StatusPageDifference,
   StoredKumaToken,
 } from "@/types"
 
@@ -44,12 +52,20 @@ export default function App() {
   const configuredInstances = useMemo(() => instances.filter((instance) => instance.url.trim()), [instances])
   const canRestoreSavedLogin = configuredInstances.length > 0 && configuredInstances.every((instance) => tokens[instance.id]?.token)
   const monitorRecords = useMemo(() => buildMonitorRecords(connectedInstances), [connectedInstances])
+  const statusPageRecords = useMemo(() => buildStatusPageRecords(connectedInstances), [connectedInstances])
   const differences = useMemo(
     () =>
       monitorRecords
         .map((record) => diffMonitorRecord(record, connectedInstances))
         .filter((diff): diff is MonitorDifference => Boolean(diff)),
     [connectedInstances, monitorRecords],
+  )
+  const statusPageDifferences = useMemo(
+    () =>
+      statusPageRecords
+        .map((record) => diffStatusPageRecord(record, connectedInstances))
+        .filter((diff): diff is StatusPageDifference => Boolean(diff)),
+    [connectedInstances, statusPageRecords],
   )
   const unmanagedMonitors = useMemo(() => getUnmanagedMonitors(connectedInstances), [connectedInstances])
   const monitorGroups = useMemo(() => getMonitorGroupViews(connectedInstances), [connectedInstances])
@@ -66,7 +82,7 @@ export default function App() {
   useEffect(() => {
     if (!canRestoreSavedLogin || attemptedSavedLoginRef.current || sessionState !== "configuring") return
     attemptedSavedLoginRef.current = true
-    if (!route.startsWith("/monitors/") && route !== "/login") navigate("/login")
+    if (!route.startsWith("/monitors/") && route !== "/login" && !route.startsWith("/status-pages/")) navigate("/login")
     void authenticateWithSavedTokens()
   }, [canRestoreSavedLogin, sessionState, route, navigate])
 
@@ -89,9 +105,9 @@ export default function App() {
             throw new Error(`${instance.name}: ${login.msg ?? "login failed"}`)
           }
 
-          const monitors = await client.getMonitors()
+          const [monitors, statusPages] = await Promise.all([client.getMonitors(), client.getStatusPages()])
           clientsRef.current[instance.id] = client
-          return { config: client.instance, token: login.token, monitors }
+          return { config: client.instance, token: login.token, monitors, statusPages }
         }),
       )
 
@@ -103,7 +119,7 @@ export default function App() {
         setConnectedInstances(connected)
         setSessionState("authenticated")
         setStatusMessage("Authenticated against every instance.")
-        navigate(route.startsWith("/monitors/") ? route : "/dashboard")
+        navigate(route.startsWith("/monitors/") || route.startsWith("/status-pages/") ? route : "/dashboard")
       })
     } catch (error) {
       disconnectAll()
@@ -131,9 +147,9 @@ export default function App() {
             throw new Error(`${instance.name}: saved token rejected`)
           }
 
-          const monitors = await client.getMonitors()
+          const [monitors, statusPages] = await Promise.all([client.getMonitors(), client.getStatusPages()])
           clientsRef.current[instance.id] = client
-          return { config: client.instance, token: stored.token, monitors }
+          return { config: client.instance, token: stored.token, monitors, statusPages }
         }),
       )
 
@@ -141,7 +157,7 @@ export default function App() {
         setConnectedInstances(connected)
         setSessionState("authenticated")
         setStatusMessage(null)
-        navigate(route.startsWith("/monitors/") ? route : "/dashboard")
+        navigate(route.startsWith("/monitors/") || route.startsWith("/status-pages/") ? route : "/dashboard")
       })
     } catch (error) {
       disconnectAll()
@@ -158,13 +174,34 @@ export default function App() {
 
     try {
       const refreshed = await Promise.all(
-        connectedInstances.map(async (instance) => ({
-          ...instance,
-          monitors: await clientsRef.current[instance.config.id].getMonitors(),
-        })),
+        connectedInstances.map(async (instance) => {
+          const [monitors, statusPages] = await Promise.all([
+            clientsRef.current[instance.config.id].getMonitors(),
+            clientsRef.current[instance.config.id].getStatusPages(),
+          ])
+          return { ...instance, monitors, statusPages }
+        }),
       )
       setConnectedInstances(refreshed)
       setStatusMessage("Monitor list refreshed.")
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Refresh failed")
+    }
+  }
+
+  async function refreshStatusPages() {
+    setStatusMessage("Refreshing status pages...")
+    setErrorMessage(null)
+
+    try {
+      const refreshed = await Promise.all(
+        connectedInstances.map(async (instance) => ({
+          ...instance,
+          statusPages: await clientsRef.current[instance.config.id].getStatusPages(),
+        })),
+      )
+      setConnectedInstances(refreshed)
+      setStatusMessage("Status pages refreshed.")
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Refresh failed")
     }
@@ -328,6 +365,91 @@ export default function App() {
     }
   }
 
+  async function saveStatusPageDetails(slug: string, values: StatusPageDetailsValues) {
+    const record = statusPageRecords.find((entry) => entry.slug === slug)
+    if (!record) return
+
+    setStatusMessage(`Saving status page ${slug}...`)
+    setErrorMessage(null)
+
+    try {
+      for (const instance of connectedInstances) {
+        const page = record.pagesByInstance[instance.config.id]
+        if (!page) continue
+
+        const instanceValues: StatusPageDetailsValues = {}
+        for (const [key, val] of Object.entries(values)) {
+          if (TEMPLATE_SUPPORTED_FIELDS.has(key) && typeof val === "string") {
+            instanceValues[key] = resolveTokens(val, instance.config.name)
+          } else {
+            instanceValues[key] = val
+          }
+        }
+
+        const response = await clientsRef.current[instance.config.id].editStatusPage({ ...page, ...instanceValues })
+        if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "save failed"}`)
+      }
+
+      await refreshStatusPages()
+      setStatusMessage(`Saved status page ${slug} across all instances.`)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Save failed")
+    }
+  }
+
+  async function createStatusPage(slug: string, values: StatusPageDetailsValues) {
+    setStatusMessage(`Creating status page ${slug} on all instances...`)
+    setErrorMessage(null)
+
+    try {
+      for (const instance of connectedInstances) {
+        const client = clientsRef.current[instance.config.id]
+
+        const instanceValues: StatusPageDetailsValues = {}
+        for (const [key, val] of Object.entries(values)) {
+          if (TEMPLATE_SUPPORTED_FIELDS.has(key) && typeof val === "string") {
+            instanceValues[key] = resolveTokens(val, instance.config.name)
+          } else {
+            instanceValues[key] = val
+          }
+        }
+
+        const response = await client.addStatusPage(instanceValues as Partial<KumaStatusPage>)
+        if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "create failed"}`)
+      }
+
+      await refreshStatusPages()
+      navigate(`/status-pages/${encodeURIComponent(slug)}`)
+      setStatusMessage(`Created status page ${slug} successfully.`)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Create failed")
+    }
+  }
+
+  async function deleteStatusPageFromAll(slug: string) {
+    const record = statusPageRecords.find((entry) => entry.slug === slug)
+    if (!record) return
+
+    setStatusMessage(`Deleting status page ${slug}...`)
+    setErrorMessage(null)
+
+    try {
+      for (const instance of connectedInstances) {
+        const page = record.pagesByInstance[instance.config.id]
+        if (!page) continue
+
+        const response = await clientsRef.current[instance.config.id].deleteStatusPage(page.id)
+        if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "delete failed"}`)
+      }
+
+      await refreshStatusPages()
+      navigate("/status-pages")
+      setStatusMessage(`Deleted status page ${slug}.`)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Delete failed")
+    }
+  }
+
   function logout() {
     disconnectAll()
     clearTokens()
@@ -351,12 +473,13 @@ export default function App() {
   }
 
   const isLoginPage = route === "/login" || (sessionState === "authenticating" && configuredInstances.length > 0)
+  const isDetailPage = route.startsWith("/monitors/") || route.startsWith("/status-pages/")
   const alertWidthClass =
     sessionState !== "authenticated"
       ? isLoginPage
         ? "mx-auto w-full max-w-md"
         : "mx-auto w-full max-w-5xl"
-      : route.startsWith("/monitors/")
+      : isDetailPage
         ? "mx-auto w-full max-w-3xl"
         : "w-full"
   const statusTone = sessionState === "authenticating" ? "loading" : "success"
@@ -384,23 +507,23 @@ export default function App() {
           ) : route === "/monitors/new" ? (
             <CreateMonitorPage
               monitorGroups={monitorGroups}
-              onBack={() => navigate("/dashboard")}
+              onBack={() => navigate("/monitors")}
               onNavigate={navigate}
               onCreate={createMonitor}
             />
-          ) : route.startsWith("/monitors/") ? (
+          ) : route.startsWith("/monitors/") && route !== "/monitors" ? (
             <MonitorPage
               route={route}
               connectedInstances={connectedInstances}
               monitorRecords={monitorRecords}
               monitorGroups={monitorGroups}
-              onBack={() => navigate("/dashboard")}
+              onBack={() => navigate("/monitors")}
               onNavigate={navigate}
               onSave={saveMonitorDetails}
               onRenameTag={renameMonitorTag}
             />
-          ) : (
-            <DashboardPage
+          ) : route === "/monitors" ? (
+            <MonitorsPage
               connectedInstances={connectedInstances}
               differences={differences}
               monitorRecords={monitorRecords}
@@ -409,6 +532,34 @@ export default function App() {
               onSyncFrom={syncFrom}
               onApplySuggestedTag={applySuggestedTag}
               onRefresh={refreshMonitors}
+              onNavigate={navigate}
+            />
+          ) : route.startsWith("/status-pages/") && route !== "/status-pages" ? (
+            <StatusPageDetailPage
+              route={route}
+              connectedInstances={connectedInstances}
+              statusPageRecords={statusPageRecords}
+              onBack={() => navigate("/status-pages")}
+              onNavigate={navigate}
+              onSave={saveStatusPageDetails}
+              onDelete={deleteStatusPageFromAll}
+            />
+          ) : route === "/status-pages" ? (
+            <StatusPagesPage
+              connectedInstances={connectedInstances}
+              statusPageRecords={statusPageRecords}
+              statusPageDifferences={statusPageDifferences}
+              onRefresh={refreshStatusPages}
+              onNavigate={navigate}
+              onCreate={createStatusPage}
+            />
+          ) : (
+            <DashboardPage
+              connectedInstances={connectedInstances}
+              differences={differences}
+              statusPageDifferences={statusPageDifferences}
+              monitorRecords={monitorRecords}
+              statusPageRecords={statusPageRecords}
               onNavigate={navigate}
             />
           )}

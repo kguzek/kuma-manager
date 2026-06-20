@@ -14,4 +14,11 @@ export const instanceSchema = z.object({
 
 export type InstanceFormValues = z.infer<typeof instanceSchema>
 export type SessionState = "configuring" | "authenticating" | "authenticated"
-export type AppRoute = "/instances" | "/login" | "/dashboard" | `/monitors/${string}`
+export type AppRoute =
+  | "/instances"
+  | "/login"
+  | "/dashboard"
+  | `/monitors/${string}`
+  | "/monitors"
+  | "/status-pages"
+  | `/status-pages/${string}`

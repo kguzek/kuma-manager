@@ -62,7 +62,7 @@ export function DiffTable({
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
-            <ArrowRightLeft className="size-5" /> Diff page
+            <ArrowRightLeft className="size-5" /> Monitor synchronization
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" disabled={isRefreshing} onClick={handleRefresh}>
@@ -77,8 +77,8 @@ export function DiffTable({
           </div>
         </div>
         <CardDescription>
-          Only monitors with at least one <code>monitor:</code> tag are compared. History, current status, ping, cert info, and IDs are
-          ignored.
+          {connectedInstances.length} instance{connectedInstances.length !== 1 ? "s" : ""} · monitors with a <code>monitor:</code> tag are
+          synchronized. History, current status, ping, cert info, and IDs are ignored.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">

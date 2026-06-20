@@ -59,8 +59,55 @@ export type KumaTagListResult = {
   tags?: Array<{ id: number; name: string; color: string }>
 }
 
+export type KumaStatusPage = {
+  id: number
+  title: string
+  description: string
+  slug: string
+  icon: string
+  theme: string
+  published: boolean
+  showTags: boolean
+  showPoweredBy: boolean
+  footerText: string
+  customCSS: string
+  domainNameList: string
+  analyticsType: string
+  analyticsId: string
+  analyticsScriptUrl: string
+  refreshInterval: number
+  publicGroupList?: PublicGroup[]
+  incidents?: KumaIncident[]
+  [key: string]: unknown
+}
+
+export type PublicGroup = {
+  id: number
+  name: string
+  weight: number
+  monitorList: PublicGroupMonitor[]
+}
+
+export type PublicGroupMonitor = {
+  id: number
+  name: string
+  sendUrl: boolean
+}
+
+export type KumaIncident = {
+  id: number
+  title: string
+  description: string
+  style: string
+  pin: boolean
+  createdDate: string
+  lastUpdatedDate: string
+  [key: string]: unknown
+}
+
 export type ConnectedKumaInstance = {
   config: KumaInstanceConfig
   token: string
   monitors: KumaMonitor[]
+  statusPages?: KumaStatusPage[]
 }
