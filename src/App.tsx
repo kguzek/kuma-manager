@@ -49,11 +49,13 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const clientsRef = useRef<Record<string, KumaApiClient>>({})
+  const attemptedSavedLoginRef = useRef(false)
 
   const configuredInstances = useMemo(
     () => instances.filter((instance) => instance.url.trim()),
     [instances],
   )
+  const canRestoreSavedLogin = configuredInstances.length > 0 && configuredInstances.every((instance) => tokens[instance.id]?.token)
 
   const monitorRecords = useMemo(() => buildMonitorRecords(connectedInstances), [connectedInstances])
   const differences = useMemo(
@@ -76,6 +78,12 @@ export default function App() {
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
   }, [])
+
+  useEffect(() => {
+    if (!canRestoreSavedLogin || attemptedSavedLoginRef.current || sessionState !== "configuring") return
+    attemptedSavedLoginRef.current = true
+    void authenticateWithSavedTokens()
+  }, [canRestoreSavedLogin, sessionState])
 
   function navigate(nextRoute: AppRoute) {
     window.history.pushState(null, "", nextRoute)
@@ -219,6 +227,7 @@ export default function App() {
   function logout() {
     disconnectAll()
     clearTokens()
+    attemptedSavedLoginRef.current = false
     setTokens({})
     setConnectedInstances([])
     setSessionState("configuring")
@@ -234,6 +243,8 @@ export default function App() {
   function instanceName(instanceId: string) {
     return connectedInstances.find((instance) => instance.config.id === instanceId)?.config.name ?? instanceId
   }
+
+  const alertWidthClass = sessionState === "authenticated" ? "w-full" : route === "/login" ? "mx-auto w-full max-w-md" : "mx-auto w-full max-w-5xl"
 
   return (
     <main className="dot-grid-bg min-h-svh px-4 py-6 text-foreground sm:px-6 lg:px-10">
@@ -259,19 +270,21 @@ export default function App() {
           )}
         </header>
 
-        {statusMessage && <StatusCard message={statusMessage} tone="success" />}
-        {errorMessage && <StatusCard message={errorMessage} tone="error" />}
+        {(statusMessage || errorMessage) && (
+          <div className={`${alertWidthClass} grid gap-3`}>
+            {statusMessage && <StatusCard message={statusMessage} tone="success" />}
+            {errorMessage && <StatusCard message={errorMessage} tone="error" />}
+          </div>
+        )}
 
         {sessionState !== "authenticated" ? (
           <AuthWall
             route={route === "/dashboard" ? "/instances" : route}
             instances={instances}
-            tokens={tokens}
             authenticating={sessionState === "authenticating"}
             onInstancesChange={setInstances}
             onNavigate={navigate}
             onPasswordLogin={authenticateWithPassword}
-            onTokenLogin={authenticateWithSavedTokens}
           />
         ) : (
           <Dashboard
@@ -292,21 +305,17 @@ export default function App() {
 function AuthWall({
   route,
   instances,
-  tokens,
   authenticating,
   onInstancesChange,
   onNavigate,
   onPasswordLogin,
-  onTokenLogin,
 }: {
   route: "/instances" | "/login"
   instances: KumaInstanceConfig[]
-  tokens: Record<string, StoredKumaToken>
   authenticating: boolean
   onInstancesChange: (instances: KumaInstanceConfig[]) => void
   onNavigate: (route: AppRoute) => void
   onPasswordLogin: (credentials: LoginCredentials) => Promise<void>
-  onTokenLogin: () => Promise<void>
 }) {
   const instanceForm = useForm<InstanceFormValues>({ resolver: zodResolver(instanceSchema), defaultValues: { instances } })
   const loginForm = useForm<LoginFormValues>({
@@ -321,8 +330,6 @@ function AuthWall({
   const watchedInstances = instanceForm.watch("instances")
   const separateCredentials = loginForm.watch("separate")
   const activeInstances = watchedInstances.filter((instance) => instance.url.trim())
-  const hasSavedTokens = activeInstances.length > 0 && activeInstances.every((instance) => tokens[instance.id]?.token)
-  const [attemptedSavedLogin, setAttemptedSavedLogin] = useState(false)
 
   useEffect(() => {
     const subscription = instanceForm.watch((value) => {
@@ -346,12 +353,6 @@ function AuthWall({
     onInstancesChange(values.instances)
     onNavigate("/login")
   })
-
-  useEffect(() => {
-    if (route !== "/login" || !hasSavedTokens || attemptedSavedLogin || authenticating) return
-    setAttemptedSavedLogin(true)
-    void onTokenLogin()
-  }, [attemptedSavedLogin, authenticating, hasSavedTokens, onTokenLogin, route])
 
   function submitLogin(values: LoginFormValues) {
     const credentials = values.separate
@@ -465,9 +466,9 @@ function AuthWall({
           </CardHeader>
           <CardContent>
             <form className="flex flex-col gap-5" onSubmit={loginForm.handleSubmit(submitLogin)}>
-              {hasSavedTokens && authenticating && (
+              {authenticating && (
                 <div className="flex items-center gap-2 rounded-xl border bg-muted/40 p-3 text-sm text-muted-foreground">
-                  <RefreshCw className="size-4 animate-spin" /> Restoring saved login...
+                  <RefreshCw className="size-4 animate-spin" /> Signing in...
                 </div>
               )}
 
