@@ -72,6 +72,18 @@ export function StatusPageDetailPage({
 
   const defaultOpenLabels = groups.filter((g) => g.defaultOpen).map((g) => g.label)
   const [accordionValues, setAccordionValues] = useState<string[]>(defaultOpenLabels)
+  const [autocompleteField, setAutocompleteField] = useState<string | null>(null)
+  const [fullPageData, setFullPageData] = useState<KumaStatusPage | null>(null)
+
+  useEffect(() => {
+    if (!record) return
+    const firstInstanceId = Object.keys(record.pagesByInstance)[0]
+    if (!firstInstanceId) return
+    setFullPageData(null)
+    onFetchStatusPageDetail(slug, firstInstanceId).then((data) => {
+      if (data) setFullPageData(data)
+    })
+  }, [slug, record, onFetchStatusPageDetail])
 
   if (!record || !firstPage) {
     return (
@@ -92,6 +104,8 @@ export function StatusPageDetailPage({
       </Card>
     )
   }
+
+  const pageForGroups = fullPageData ?? firstPage
 
   const settingDiffs = getStatusPageSettingDiffs(record, connectedInstances)
   const diffFieldSet = new Set(settingDiffs.map((d) => d.field))
@@ -115,21 +129,6 @@ export function StatusPageDetailPage({
     form.setValue(field, value as never)
     void form.handleSubmit((values) => onSave(slug, values))()
   }
-
-  const [autocompleteField, setAutocompleteField] = useState<string | null>(null)
-  const [fullPageData, setFullPageData] = useState<KumaStatusPage | null>(null)
-
-  const pageForGroups = fullPageData ?? firstPage
-
-  useEffect(() => {
-    if (!record) return
-    const firstInstanceId = Object.keys(record.pagesByInstance)[0]
-    if (!firstInstanceId) return
-    setFullPageData(null)
-    onFetchStatusPageDetail(slug, firstInstanceId).then((data) => {
-      if (data) setFullPageData(data)
-    })
-  }, [slug, record, onFetchStatusPageDetail])
 
   function renderTemplateIcon() {
     return <Braces className="ml-1.5 inline size-3.5 text-muted-foreground/60" aria-label="Supports template tokens" />
@@ -550,30 +549,32 @@ function PublicGroupsSection({
   const [addingMonitorGroupId, setAddingMonitorGroupId] = useState<number | null>(null)
 
   async function handleAddGroup() {
-    if (!newGroupName.trim() || !pageForGroups) return
-    await onAddPublicGroup(slug, firstInstanceId!, pageForGroups.id, newGroupName.trim())
+    if (!newGroupName.trim() || !pageForGroups || !firstInstanceId) return
+    await onAddPublicGroup(slug, firstInstanceId, pageForGroups.id, newGroupName.trim())
     setNewGroupName("")
     setAddingGroup(false)
   }
 
   async function handleRenameGroup(groupId: number) {
-    if (!renameValue.trim()) return
-    await onRenamePublicGroup(slug, firstInstanceId!, groupId, renameValue.trim())
+    if (!renameValue.trim() || !firstInstanceId) return
+    await onRenamePublicGroup(slug, firstInstanceId, groupId, renameValue.trim())
     setRenamingGroupId(null)
     setRenameValue("")
   }
 
   async function handleDeleteGroup(groupId: number) {
-    await onDeletePublicGroup(slug, firstInstanceId!, groupId)
+    if (!firstInstanceId) return
+    await onDeletePublicGroup(slug, firstInstanceId, groupId)
     setConfirmDeleteGroupId(null)
   }
 
   async function handleToggleMonitor(groupId: number, currentList: PublicGroupMonitor[], monitor: { id: number; name: string }) {
+    if (!firstInstanceId) return
     const alreadyInGroup = currentList.some((m) => m.id === monitor.id)
     const newList = alreadyInGroup
       ? currentList.filter((m) => m.id !== monitor.id)
       : [...currentList, { id: monitor.id, name: monitor.name, sendUrl: false }]
-    await onSetPublicGroupMonitors(slug, firstInstanceId!, groupId, newList)
+    await onSetPublicGroupMonitors(slug, firstInstanceId, groupId, newList)
   }
 
   const availableMonitors = firstInstance?.monitors ?? []
