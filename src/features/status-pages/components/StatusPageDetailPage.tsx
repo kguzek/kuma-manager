@@ -672,10 +672,15 @@ function PublicGroupsSection({
     prevMonitorListsRef.current = localMonitorLists
     setLocalMonitorLists((prev) => ({ ...prev, [groupId]: reordered }))
     setMonitorError(null)
-    const result = await onSaveStatusPagePublicGroups(slug, groupId, reordered)
-    if (!result.ok) {
+    try {
+      const result = await onSaveStatusPagePublicGroups(slug, groupId, reordered)
+      if (!result.ok) {
+        setLocalMonitorLists(prevMonitorListsRef.current)
+        setMonitorError(result.msg ?? "Failed to reorder monitors")
+      }
+    } catch (err) {
       setLocalMonitorLists(prevMonitorListsRef.current)
-      setMonitorError(result.msg ?? "Failed to reorder monitors")
+      setMonitorError(err instanceof Error ? err.message : "API request failed")
     }
   }
 

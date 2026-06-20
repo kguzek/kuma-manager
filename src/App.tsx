@@ -24,7 +24,6 @@ import { buildStatusPageRecords, diffStatusPageRecord } from "@/features/status-
 import { clearTokens, loadInstances, loadTokens, saveInstances, saveTokens } from "@/utils/storage"
 import { resolveTokens, TEMPLATE_SUPPORTED_FIELDS } from "@/utils/template-tokens"
 import type { KumaApiClient } from "@/api/kuma/client"
-import { STATUS_PAGE_IGNORED_FIELDS } from "@/features/status-pages/utils/status-page-sync"
 import type {
   ConnectedKumaInstance,
   KumaInstanceConfig,
@@ -579,30 +578,46 @@ export default function App() {
     const record = statusPageRecords.find((entry) => entry.slug === slug)
     if (!record) return { ok: false, msg: "Status page record not found" }
 
+    const firstPage = record.pagesByInstance[Object.keys(record.pagesByInstance)[0]]
+    const targetGroup = firstPage?.publicGroupList?.find((g) => g.id === groupId)
+    if (!targetGroup) return { ok: false, msg: "Group not found" }
+
     const errors: string[] = []
 
     for (const instance of connectedInstances) {
       const page = record.pagesByInstance[instance.config.id]
-      if (!page) continue
-
-      const client = clientsRef.current[instance.config.id]
-      if (!client) continue
-
-      const config: Record<string, unknown> = {}
-      for (const [key, val] of Object.entries(page)) {
-        if (STATUS_PAGE_IGNORED_FIELDS.has(key)) continue
-        config[key] = val
+      if (!page) {
+        errors.push(`${instance.config.name}: page not found`)
+        continue
       }
 
-      const currentList = page.publicGroupList ?? []
-      const updatedList = currentList.map((group) => {
-        if (group.id !== groupId) return group
-        return { ...group, monitorList }
+      const client = clientsRef.current[instance.config.id]
+      if (!client) {
+        errors.push(`${instance.config.name}: client not connected`)
+        continue
+      }
+
+      const updatedGroupList = (page.publicGroupList ?? []).map((g) => {
+        if (g.id === groupId || g.name === targetGroup.name) {
+          return { ...g, monitorList }
+        }
+        return g
       })
 
-      const result = await client.saveStatusPage({ slug, config, imgDataUrl: "", publicGroupList: updatedList })
-      if (!result.ok) {
-        errors.push(`${instance.config.name}: ${result.msg ?? "save failed"}`)
+      const { id: _id, publicGroupList: _pgl, incidents: _inc, ok: _ok, ...config } = page
+
+      try {
+        const result = await client.saveStatusPage({
+          slug,
+          config: config as Record<string, unknown>,
+          imgDataUrl: "",
+          publicGroupList: updatedGroupList,
+        })
+        if (!result.ok) {
+          errors.push(`${instance.config.name}: ${result.msg ?? "save failed"}`)
+        }
+      } catch (err) {
+        errors.push(`${instance.config.name}: ${err instanceof Error ? err.message : "request failed"}`)
       }
     }
 

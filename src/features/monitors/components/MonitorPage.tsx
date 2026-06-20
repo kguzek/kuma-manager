@@ -195,8 +195,10 @@ export function MonitorPage({
     if (typeof value === "number") {
       return (
         <Field key={field}>
-          <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
-          {conflictBadges()}
+          <div className="flex flex-wrap items-center gap-2">
+            <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
+            {conflictBadges()}
+          </div>
           <Input
             id={`monitor-${field}`}
             type="number"
@@ -224,8 +226,10 @@ export function MonitorPage({
 
     return (
       <Field key={field}>
-        <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
-        {conflictBadges()}
+        <div className="flex flex-wrap items-center gap-2">
+          <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
+          {conflictBadges()}
+        </div>
         <Input id={`monitor-${field}`} style={isDiff ? { borderColor: "#eab308" } : undefined} {...form.register(field)} />
       </Field>
     )
