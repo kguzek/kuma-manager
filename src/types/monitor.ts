@@ -13,10 +13,4 @@ export type MonitorDifference = {
   instances: string[]
 }
 
-export type MonitorDetailsValues = {
-  name: string
-  url: string
-  interval: number
-  retryInterval: number
-  maxretries: number
-}
+export type MonitorDetailsValues = Record<string, unknown>

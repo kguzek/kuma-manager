@@ -26,7 +26,9 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
     const haystack = [
       record.tag,
       ...Object.values(record.monitorsByInstance).flatMap((monitor) => [monitor.name, monitor.url, monitor.hostname]),
-    ].join(" ").toLowerCase()
+    ]
+      .join(" ")
+      .toLowerCase()
     const matchesSearch = haystack.includes(search.toLowerCase())
     const hasDiff = differences.some((entry) => entry.tag === record.tag) || hasMonitorSettingDiffs(record, connectedInstances)
     const matchesFilter = filter === "all" || (filter === "diff" ? hasDiff : !hasDiff)
@@ -37,16 +39,32 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><ArrowRightLeft className="size-5" /> Diff page</CardTitle>
-        <CardDescription>Only monitors with at least one <code>monitor:</code> tag are compared. History, current status, ping, cert info, and IDs are ignored.</CardDescription>
+        <CardTitle className="flex items-center gap-2">
+          <ArrowRightLeft className="size-5" /> Diff page
+        </CardTitle>
+        <CardDescription>
+          Only monitors with at least one <code>monitor:</code> tag are compared. History, current status, ping, cert info, and IDs are
+          ignored.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <Input className="md:max-w-sm" placeholder="Search tag, name, or URL..." value={search} onChange={(event) => setSearch(event.target.value)} />
+          <Input
+            className="md:max-w-sm"
+            placeholder="Search tag, name, or URL..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>All</Button>
-            <Button size="sm" variant={filter === "diff" ? "default" : "outline"} onClick={() => setFilter("diff")}>Changed</Button>
-            <Button size="sm" variant={filter === "sync" ? "default" : "outline"} onClick={() => setFilter("sync")}>In sync</Button>
+            <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>
+              All
+            </Button>
+            <Button size="sm" variant={filter === "diff" ? "default" : "outline"} onClick={() => setFilter("diff")}>
+              Changed
+            </Button>
+            <Button size="sm" variant={filter === "sync" ? "default" : "outline"} onClick={() => setFilter("sync")}>
+              In sync
+            </Button>
           </div>
         </div>
         <div className="overflow-x-auto rounded-xl border">
@@ -54,7 +72,9 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
             <TableHeader>
               <TableRow>
                 <TableHead>Sync tag</TableHead>
-                {connectedInstances.map((instance) => <TableHead key={instance.config.id}>{instance.config.name}</TableHead>)}
+                {connectedInstances.map((instance) => (
+                  <TableHead key={instance.config.id}>{instance.config.name}</TableHead>
+                ))}
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -73,12 +93,20 @@ export function DiffTable({ connectedInstances, differences, monitorRecords, mon
               ))}
               {filteredRecords.length === 0 && monitorRecords.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={connectedInstances.length + 3} className="py-10 text-center text-muted-foreground">No managed monitors yet. Add monitor:* tags below to opt monitors into sync.</TableCell>
+                  <TableCell colSpan={connectedInstances.length + 3} className="py-10 text-center text-muted-foreground">
+                    No managed monitors yet. Add monitor:* tags below to opt monitors into sync.
+                  </TableCell>
                 </TableRow>
               )}
               {filteredRecords.length === 0 && monitorRecords.length > 0 && (
                 <TableRow>
-                  <TableCell colSpan={connectedInstances.length + 3} className="py-10 text-center text-muted-foreground">{filter === "diff" ? "All monitors are in sync!" : filter === "sync" ? "All monitors are out of sync." : "No monitors match your search."}</TableCell>
+                  <TableCell colSpan={connectedInstances.length + 3} className="py-10 text-center text-muted-foreground">
+                    {filter === "diff"
+                      ? "All monitors are in sync!"
+                      : filter === "sync"
+                        ? "All monitors are out of sync."
+                        : "No monitors match your search."}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>

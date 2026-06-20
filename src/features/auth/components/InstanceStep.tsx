@@ -19,7 +19,17 @@ type InstanceStepProps = {
   onNext: () => void
 }
 
-export function InstanceStep({ fields, activeInstanceCount, errors, register, append, remove, getInstances, onInstancesChange, onNext }: InstanceStepProps) {
+export function InstanceStep({
+  fields,
+  activeInstanceCount,
+  errors,
+  register,
+  append,
+  remove,
+  getInstances,
+  onInstancesChange,
+  onNext,
+}: InstanceStepProps) {
   return (
     <Card className="setup-panel">
       <CardHeader className="text-center">
@@ -53,7 +63,9 @@ export function InstanceStep({ fields, activeInstanceCount, errors, register, ap
             />
           </div>
           <div className="flex justify-end">
-            <Button type="submit" size="lg" disabled={activeInstanceCount === 0}>Next <ChevronRight /></Button>
+            <Button type="submit" size="lg" disabled={activeInstanceCount === 0}>
+              Next <ChevronRight />
+            </Button>
           </div>
         </form>
       </CardContent>

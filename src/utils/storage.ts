@@ -3,9 +3,7 @@ import type { KumaInstanceConfig, StoredKumaToken } from "@/types"
 const INSTANCE_KEY = "kuma-manager.instances"
 const TOKEN_KEY = "kuma-manager.tokens"
 
-const defaultInstances: KumaInstanceConfig[] = [
-  { id: crypto.randomUUID(), name: "Kuma 1", url: "" },
-]
+const defaultInstances: KumaInstanceConfig[] = [{ id: crypto.randomUUID(), name: "Kuma 1", url: "" }]
 
 function readJson<T>(key: string, fallback: T): T {
   const raw = localStorage.getItem(key)

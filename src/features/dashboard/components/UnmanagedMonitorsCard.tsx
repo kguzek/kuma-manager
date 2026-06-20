@@ -18,8 +18,12 @@ export function UnmanagedMonitorsCard({ unmanagedMonitors, onApplySuggestedTag }
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Tags className="size-5" /> Unmanaged monitors</CardTitle>
-        <CardDescription>These monitors do not have a <code>monitor:</code> tag. Suggested tags are initially based on the URL or hostname domain.</CardDescription>
+        <CardTitle className="flex items-center gap-2">
+          <Tags className="size-5" /> Unmanaged monitors
+        </CardTitle>
+        <CardDescription>
+          These monitors do not have a <code>monitor:</code> tag. Suggested tags are initially based on the URL or hostname domain.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         {unmanagedMonitors.map(({ instance, monitor, suggestedTag }) => {

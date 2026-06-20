@@ -8,10 +8,26 @@ import { DashboardPage } from "@/features/dashboard/components/DashboardPage"
 import { MonitorPage } from "@/features/monitors/components/MonitorPage"
 import { useAppRoute } from "@/hooks/useAppRoute"
 import { createKumaApiClient } from "@/api/kuma/client"
-import { buildMonitorRecords, diffMonitorRecord, getMonitorGroupViews, getUnmanagedMonitors, prepareMonitorForCreate, prepareMonitorForEdit } from "@/features/monitors/utils/monitor-sync"
+import {
+  buildMonitorRecords,
+  diffMonitorRecord,
+  getMonitorGroupViews,
+  getUnmanagedMonitors,
+  prepareMonitorForCreate,
+  prepareMonitorForEdit,
+} from "@/features/monitors/utils/monitor-sync"
 import { clearTokens, loadInstances, loadTokens, saveInstances, saveTokens } from "@/utils/storage"
 import type { KumaApiClient } from "@/api/kuma/client"
-import type { ConnectedKumaInstance, KumaInstanceConfig, KumaMonitor, LoginCredentials, MonitorDetailsValues, MonitorDifference, SessionState, StoredKumaToken } from "@/types"
+import type {
+  ConnectedKumaInstance,
+  KumaInstanceConfig,
+  KumaMonitor,
+  LoginCredentials,
+  MonitorDetailsValues,
+  MonitorDifference,
+  SessionState,
+  StoredKumaToken,
+} from "@/types"
 
 export default function App() {
   const [instances, setInstances] = useState<KumaInstanceConfig[]>(() => loadInstances())
@@ -28,7 +44,10 @@ export default function App() {
   const canRestoreSavedLogin = configuredInstances.length > 0 && configuredInstances.every((instance) => tokens[instance.id]?.token)
   const monitorRecords = useMemo(() => buildMonitorRecords(connectedInstances), [connectedInstances])
   const differences = useMemo(
-    () => monitorRecords.map((record) => diffMonitorRecord(record, connectedInstances)).filter((diff): diff is MonitorDifference => Boolean(diff)),
+    () =>
+      monitorRecords
+        .map((record) => diffMonitorRecord(record, connectedInstances))
+        .filter((diff): diff is MonitorDifference => Boolean(diff)),
     [connectedInstances, monitorRecords],
   )
   const unmanagedMonitors = useMemo(() => getUnmanagedMonitors(connectedInstances), [connectedInstances])
@@ -181,16 +200,18 @@ export default function App() {
     try {
       const response = await client.addMonitorTag(monitor.id, tag)
       if (!response.ok) throw new Error(response.msg ?? "Failed to apply tag")
-      setConnectedInstances((current) => current.map((instance) => {
-        if (instance.config.id !== instanceId) return instance
+      setConnectedInstances((current) =>
+        current.map((instance) => {
+          if (instance.config.id !== instanceId) return instance
 
-        return {
-          ...instance,
-          monitors: instance.monitors.map((entry) => entry.id === monitor.id
-            ? { ...entry, tags: [...(entry.tags ?? []), { name: tag, value: null, color: "#2563eb" }] }
-            : entry),
-        }
-      }))
+          return {
+            ...instance,
+            monitors: instance.monitors.map((entry) =>
+              entry.id === monitor.id ? { ...entry, tags: [...(entry.tags ?? []), { name: tag, value: null, color: "#2563eb" }] } : entry,
+            ),
+          }
+        }),
+      )
       await refreshMonitors()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to apply tag")
@@ -209,34 +230,22 @@ export default function App() {
         const monitor = record.monitorsByInstance[instance.config.id]
         if (!monitor) continue
 
-        const response = await clientsRef.current[instance.config.id].editMonitor({
-          ...monitor,
-          name: values.name,
-          url: values.url,
-          interval: values.interval,
-          retryInterval: values.retryInterval,
-          maxretries: values.maxretries,
-        })
+        const response = await clientsRef.current[instance.config.id].editMonitor({ ...monitor, ...values })
 
         if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "save failed"}`)
       }
 
-      setConnectedInstances((current) => current.map((instance) => ({
-        ...instance,
-        monitors: instance.monitors.map((monitor) => {
-          const target = record.monitorsByInstance[instance.config.id]
-          if (!target || monitor.id !== target.id) return monitor
+      setConnectedInstances((current) =>
+        current.map((instance) => ({
+          ...instance,
+          monitors: instance.monitors.map((monitor) => {
+            const target = record.monitorsByInstance[instance.config.id]
+            if (!target || monitor.id !== target.id) return monitor
 
-          return {
-            ...monitor,
-            name: values.name,
-            url: values.url,
-            interval: values.interval,
-            retryInterval: values.retryInterval,
-            maxretries: values.maxretries,
-          }
-        }),
-      })))
+            return { ...monitor, ...values }
+          }),
+        })),
+      )
       setStatusMessage(`Saved ${tag} across all available instances.`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Save failed")
@@ -259,18 +268,20 @@ export default function App() {
         if (!response.ok) throw new Error(`${instance.config.name}: ${response.msg ?? "tag rename failed"}`)
       }
 
-      setConnectedInstances((current) => current.map((instance) => ({
-        ...instance,
-        monitors: instance.monitors.map((monitor) => {
-          const target = record.monitorsByInstance[instance.config.id]
-          if (!target || monitor.id !== target.id) return monitor
+      setConnectedInstances((current) =>
+        current.map((instance) => ({
+          ...instance,
+          monitors: instance.monitors.map((monitor) => {
+            const target = record.monitorsByInstance[instance.config.id]
+            if (!target || monitor.id !== target.id) return monitor
 
-          return {
-            ...monitor,
-            tags: [...(monitor.tags ?? []).filter((tag) => tag.name !== oldTag), { name: newTag, value: null, color: "#2563eb" }],
-          }
-        }),
-      })))
+            return {
+              ...monitor,
+              tags: [...(monitor.tags ?? []).filter((tag) => tag.name !== oldTag), { name: newTag, value: null, color: "#2563eb" }],
+            }
+          }),
+        })),
+      )
       setStatusMessage(`Renamed ${oldTag} to ${newTag}.`)
       navigate(`/monitors/${encodeURIComponent(newTag.replace(/^monitor:/, ""))}`)
       await refreshMonitors()
@@ -300,9 +311,14 @@ export default function App() {
   }
 
   const isLoginPage = route === "/login" || (sessionState === "authenticating" && configuredInstances.length > 0)
-  const alertWidthClass = sessionState !== "authenticated"
-    ? isLoginPage ? "mx-auto w-full max-w-md" : "mx-auto w-full max-w-5xl"
-    : route.startsWith("/monitors/") ? "mx-auto w-full max-w-3xl" : "w-full"
+  const alertWidthClass =
+    sessionState !== "authenticated"
+      ? isLoginPage
+        ? "mx-auto w-full max-w-md"
+        : "mx-auto w-full max-w-5xl"
+      : route.startsWith("/monitors/")
+        ? "mx-auto w-full max-w-3xl"
+        : "w-full"
   const statusTone = sessionState === "authenticating" ? "loading" : "success"
 
   return (
@@ -326,7 +342,15 @@ export default function App() {
               onPasswordLogin={authenticateWithPassword}
             />
           ) : route.startsWith("/monitors/") ? (
-            <MonitorPage route={route} connectedInstances={connectedInstances} monitorRecords={monitorRecords} onBack={() => navigate("/dashboard")} onNavigate={navigate} onSave={saveMonitorDetails} onRenameTag={renameMonitorTag} />
+            <MonitorPage
+              route={route}
+              connectedInstances={connectedInstances}
+              monitorRecords={monitorRecords}
+              onBack={() => navigate("/dashboard")}
+              onNavigate={navigate}
+              onSave={saveMonitorDetails}
+              onRenameTag={renameMonitorTag}
+            />
           ) : (
             <DashboardPage
               connectedInstances={connectedInstances}

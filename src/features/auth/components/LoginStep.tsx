@@ -31,7 +31,9 @@ export function LoginStep({ instances, authenticating, onNavigate, onPasswordLog
   function submitLogin(values: LoginFormValues) {
     const credentials = values.single
       ? Object.fromEntries(activeInstances.map((instance) => [instance.id, { username: values.username, password: values.password }]))
-      : Object.fromEntries(activeInstances.map((instance) => [instance.id, values.credentials[instance.id] ?? { username: "", password: "" }]))
+      : Object.fromEntries(
+          activeInstances.map((instance) => [instance.id, values.credentials[instance.id] ?? { username: "", password: "" }]),
+        )
 
     const missing = Object.entries(credentials).find(([, credential]) => !credential.username.trim() || !credential.password)
     if (missing) {
@@ -50,7 +52,9 @@ export function LoginStep({ instances, authenticating, onNavigate, onPasswordLog
           <ShieldCheck className="size-5" />
         </div>
         <CardTitle className="text-2xl">Sign in</CardTitle>
-        <CardDescription>{activeInstances.length} instance{activeInstances.length === 1 ? "" : "s"} configured</CardDescription>
+        <CardDescription>
+          {activeInstances.length} instance{activeInstances.length === 1 ? "" : "s"} configured
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-5" onSubmit={loginForm.handleSubmit(submitLogin)}>
@@ -59,7 +63,11 @@ export function LoginStep({ instances, authenticating, onNavigate, onPasswordLog
               <FieldLabel htmlFor="single-credentials">Single credentials</FieldLabel>
               <FieldDescription>Use one login for every instance.</FieldDescription>
             </div>
-            <Switch id="single-credentials" checked={singleCredentials} onCheckedChange={(checked) => loginForm.setValue("single", checked, { shouldDirty: true })} />
+            <Switch
+              id="single-credentials"
+              checked={singleCredentials}
+              onCheckedChange={(checked) => loginForm.setValue("single", checked, { shouldDirty: true })}
+            />
           </Field>
           {singleCredentials ? (
             <>
@@ -77,14 +85,25 @@ export function LoginStep({ instances, authenticating, onNavigate, onPasswordLog
             <div className="grid gap-4">
               {activeInstances.map((instance) => (
                 <div key={instance.id} className="grid gap-3 rounded-xl border p-3">
-                  <div className="flex items-center gap-2 text-sm font-medium"><Server className="size-4" /> {instance.name}</div>
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Server className="size-4" /> {instance.name}
+                  </div>
                   <Field>
                     <FieldLabel htmlFor={`${instance.id}-username`}>Username</FieldLabel>
-                    <Input id={`${instance.id}-username`} autoComplete="username" {...loginForm.register(`credentials.${instance.id}.username`)} />
+                    <Input
+                      id={`${instance.id}-username`}
+                      autoComplete="username"
+                      {...loginForm.register(`credentials.${instance.id}.username`)}
+                    />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor={`${instance.id}-password`}>Password</FieldLabel>
-                    <Input id={`${instance.id}-password`} type="password" autoComplete="current-password" {...loginForm.register(`credentials.${instance.id}.password`)} />
+                    <Input
+                      id={`${instance.id}-password`}
+                      type="password"
+                      autoComplete="current-password"
+                      {...loginForm.register(`credentials.${instance.id}.password`)}
+                    />
                   </Field>
                 </div>
               ))}
@@ -92,10 +111,14 @@ export function LoginStep({ instances, authenticating, onNavigate, onPasswordLog
           )}
           <FieldError errors={[loginForm.formState.errors.root]} />
           <div className="grid gap-2">
-            <Button type="submit" size="lg" disabled={authenticating}>{authenticating ? <RefreshCw className="animate-spin" /> : <ShieldCheck />} Sign in</Button>
+            <Button type="submit" size="lg" disabled={authenticating}>
+              {authenticating ? <RefreshCw className="animate-spin" /> : <ShieldCheck />} Sign in
+            </Button>
           </div>
           <Button type="button" variant="ghost" asChild>
-            <RouteLink href="/instances" onNavigate={onNavigate}><ArrowLeft /> Back</RouteLink>
+            <RouteLink href="/instances" onNavigate={onNavigate}>
+              <ArrowLeft /> Back
+            </RouteLink>
           </Button>
         </form>
       </CardContent>

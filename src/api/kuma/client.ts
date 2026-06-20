@@ -1,12 +1,6 @@
 import { io, type Socket } from "socket.io-client"
 
-import type {
-  KumaCommandResult,
-  KumaInstanceConfig,
-  KumaLoginResult,
-  KumaMonitor,
-  KumaTagListResult,
-} from "@/types"
+import type { KumaCommandResult, KumaInstanceConfig, KumaLoginResult, KumaMonitor, KumaTagListResult } from "@/types"
 
 type KumaServerEvents = {
   monitorList: (payload: Record<string, KumaMonitor>) => void
@@ -28,7 +22,10 @@ type KumaClientEvents = {
   resumeMonitor: (monitorID: number, callback: (response: KumaCommandResult) => void) => void
   getMonitor: (monitorID: number, callback: (response: { ok: boolean; monitor?: KumaMonitor; msg?: string }) => void) => void
   getTags: (callback: (response: KumaTagListResult) => void) => void
-  addTag: (tag: { name: string; color: string }, callback: (response: KumaCommandResult & { tag?: { id: number; name: string; color: string } }) => void) => void
+  addTag: (
+    tag: { name: string; color: string },
+    callback: (response: KumaCommandResult & { tag?: { id: number; name: string; color: string } }) => void,
+  ) => void
   addMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
   deleteMonitorTag: (tagID: number, monitorID: number, value: string | null, callback: (response: KumaCommandResult) => void) => void
 }

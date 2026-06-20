@@ -23,7 +23,10 @@ export function DiffTableRowGroup({ groupName, records, connectedInstances, diff
   return (
     <>
       <TableRow className="bg-muted/40 hover:bg-muted/40">
-        <TableCell colSpan={connectedInstances.length + 3} className="py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <TableCell
+          colSpan={connectedInstances.length + 3}
+          className="py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+        >
           {groupName}
         </TableCell>
       </TableRow>
@@ -42,22 +45,42 @@ export function DiffTableRowGroup({ groupName, records, connectedInstances, diff
               </TableCell>
               {connectedInstances.map((instance) => {
                 const monitor = record.monitorsByInstance[instance.config.id]
-                return <TableCell key={instance.config.id}>{monitor ? monitor.name : <span className="text-muted-foreground">Missing</span>}</TableCell>
+                return (
+                  <TableCell key={instance.config.id}>
+                    {monitor ? monitor.name : <span className="text-muted-foreground">Missing</span>}
+                  </TableCell>
+                )
               })}
               <TableCell>
                 {settingDiffs.length > 0 ? (
                   <Button variant="destructive" className="h-auto px-2 py-1 text-xs" asChild>
-                    <RouteLink href={`/monitors/${encodeURIComponent(stripMonitorPrefix(record.tag))}`} onNavigate={onNavigate}>View diff</RouteLink>
+                    <RouteLink href={`/monitors/${encodeURIComponent(stripMonitorPrefix(record.tag))}`} onNavigate={onNavigate}>
+                      View diff
+                    </RouteLink>
                   </Button>
                 ) : diff ? (
                   <Badge variant="destructive">{diff.description}</Badge>
-                ) : <Badge variant="secondary"><CheckCircle2 /> In sync</Badge>}
+                ) : (
+                  <Badge variant="secondary">
+                    <CheckCircle2 /> In sync
+                  </Badge>
+                )}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex flex-wrap justify-end gap-2">
-                  {connectedInstances.map((instance) => record.monitorsByInstance[instance.config.id] && (
-                    <Button key={instance.config.id} size="sm" variant="outline" onClick={() => onSyncFrom(instance.config.id, record.tag)}>Use {instance.config.name}</Button>
-                  ))}
+                  {connectedInstances.map(
+                    (instance) =>
+                      record.monitorsByInstance[instance.config.id] && (
+                        <Button
+                          key={instance.config.id}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onSyncFrom(instance.config.id, record.tag)}
+                        >
+                          Use {instance.config.name}
+                        </Button>
+                      ),
+                  )}
                 </div>
               </TableCell>
             </TableRow>

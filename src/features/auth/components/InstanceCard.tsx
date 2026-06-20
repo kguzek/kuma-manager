@@ -39,7 +39,12 @@ export function InstanceCard({ index, canRemove, errors, register, onRemove }: I
           <FieldLabel htmlFor={`instance-${index}-url`}>URL</FieldLabel>
           <div className="relative">
             <Link className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input id={`instance-${index}-url`} className="pl-9" placeholder="https://kuma.example.com" {...register(`instances.${index}.url`)} />
+            <Input
+              id={`instance-${index}-url`}
+              className="pl-9"
+              placeholder="https://kuma.example.com"
+              {...register(`instances.${index}.url`)}
+            />
           </div>
           <FieldError errors={[errors.instances?.[index]?.url]} />
         </Field>
