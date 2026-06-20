@@ -18,6 +18,7 @@ export const MONITOR_IGNORED_FIELDS = new Set([
   "pathName",
   "tags",
   "parent",
+  "jsonPath",
 ])
 
 export function getMonitorSettingFields(record: MonitorSyncRecord, instances: ConnectedKumaInstance[]) {

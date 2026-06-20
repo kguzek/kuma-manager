@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { ArrowLeft, Pencil, Save, Search, Tags, X } from "lucide-react"
 
@@ -32,6 +32,11 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
   const [editingTag, setEditingTag] = useState(false)
   const [tagSuffixInput, setTagSuffixInput] = useState("")
   const tagSuffix = route.startsWith("/monitors/") ? decodeURIComponent(route.replace("/monitors/", "")) : ""
+
+  useEffect(() => {
+    setEditingTag(false)
+    setTagSuffixInput("")
+  }, [tagSuffix])
   const tag = `monitor:${tagSuffix}`
   const record = monitorRecords.find((entry) => entry.tag === tag)
   const firstMonitor = connectedInstances.map((instance) => record?.monitorsByInstance[instance.config.id]).find(Boolean)
@@ -137,7 +142,7 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
           <Input
             id={`monitor-${field}`}
             type="number"
-            className={isDiff ? "border-yellow-500" : ""}
+            style={isDiff ? { borderColor: "#eab308" } : undefined}
             {...form.register(field, { valueAsNumber: true })}
           />
         </Field>
@@ -162,123 +167,125 @@ export function MonitorPage({ route, connectedInstances, monitorRecords, onBack,
     return (
       <Field key={field}>
         <FieldLabel htmlFor={`monitor-${field}`}>{label}</FieldLabel>
-        <Input id={`monitor-${field}`} className={isDiff ? "border-yellow-500" : ""} {...form.register(field)} />
+        <Input id={`monitor-${field}`} style={isDiff ? { borderColor: "#eab308" } : undefined} {...form.register(field)} />
       </Field>
     )
   }
 
   return (
-    <Card className="mx-auto w-full max-w-3xl">
-      <CardHeader>
-        <div className="mb-2">
-          <Button variant="ghost" asChild>
-            <RouteLink href="/dashboard" onNavigate={onNavigate}>
-              <ArrowLeft /> Back
-            </RouteLink>
-          </Button>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="flex min-w-0 items-center gap-2">
-            <Tags className="size-5" />
-            {editingTag ? (
-              <InputGroup className="max-w-sm font-mono">
-                <InputGroupAddon>monitor:</InputGroupAddon>
-                <InputGroupInput
-                  value={tagSuffixInput}
-                  placeholder="example.com"
-                  onChange={(event) => setTagSuffixInput(event.target.value.replace(/^monitor:/, ""))}
-                />
-              </InputGroup>
-            ) : (
-              <span className="font-mono">{tag}</span>
-            )}
-          </CardTitle>
-          <div className="flex gap-2">
-            {editingTag && (
+    <div className="mx-auto w-full max-w-3xl">
+      <div className="mb-2">
+        <Button variant="ghost" asChild>
+          <RouteLink href="/dashboard" onNavigate={onNavigate}>
+            <ArrowLeft /> Back
+          </RouteLink>
+        </Button>
+      </div>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="flex min-w-0 items-center gap-2">
+              <Tags className="size-5" />
+              {editingTag ? (
+                <InputGroup className="max-w-sm font-mono">
+                  <InputGroupAddon>monitor:</InputGroupAddon>
+                  <InputGroupInput
+                    value={tagSuffixInput}
+                    placeholder="example.com"
+                    onChange={(event) => setTagSuffixInput(event.target.value.replace(/^monitor:/, ""))}
+                  />
+                </InputGroup>
+              ) : (
+                <span className="font-mono">{tag}</span>
+              )}
+            </CardTitle>
+            <div className="flex gap-2">
+              {editingTag && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!tagSuffixInput.trim() || pendingTag === tag}
+                  onClick={() => void onRenameTag(tag, pendingTag)}
+                >
+                  <Save /> Save tag
+                </Button>
+              )}
               <Button
                 size="sm"
-                variant="outline"
-                disabled={!tagSuffixInput.trim() || pendingTag === tag}
-                onClick={() => void onRenameTag(tag, pendingTag)}
+                variant="ghost"
+                onClick={() => {
+                  setTagSuffixInput(getTagSuffix(tag))
+                  setEditingTag((current) => !current)
+                }}
               >
-                <Save /> Save tag
+                {editingTag ? <X /> : <Pencil />}
               </Button>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setTagSuffixInput(getTagSuffix(tag))
-                setEditingTag((current) => !current)
-              }}
-            >
-              {editingTag ? <X /> : <Pencil />}
-            </Button>
+            </div>
           </div>
-        </div>
-        <CardDescription>Edit shared monitor fields and save them to every instance where this tag exists.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-5">
-        {structuralDiff && structuralDiff.issue === "different" && settingDiffs.length === 0 && (
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-            Instances have the same settings, but tags or group assignments differ.
+          <CardDescription>Edit shared monitor fields and save them to every instance where this tag exists.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5">
+          {structuralDiff && structuralDiff.issue === "different" && settingDiffs.length === 0 && (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              Instances have the same settings, but tags or group assignments differ.
+            </div>
+          )}
+          <div className="grid gap-3">
+            <div className="text-sm font-medium">Setting diff</div>
+            <SettingsDiff diffs={settingDiffs} emptyMessage="All compared settings match across instances." onShowField={handleShowField} />
           </div>
-        )}
-        <div className="grid gap-3">
-          <div className="text-sm font-medium">Setting diff</div>
-          <SettingsDiff diffs={settingDiffs} emptyMessage="All compared settings match across instances." onShowField={handleShowField} />
-        </div>
-        <div className="rounded-2xl border bg-muted/20 p-4">
-          <div className="mb-3 text-sm font-medium">Instances</div>
-          <div className="grid gap-2">
-            {connectedInstances.map((instance) => {
-              const monitor = record.monitorsByInstance[instance.config.id]
-              return (
-                <div
-                  key={instance.config.id}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-background/40 px-3 py-2 text-sm"
-                >
-                  <span>{instance.config.name}</span>
-                  {monitor ? <Badge variant="secondary">{monitor.name}</Badge> : <Badge variant="destructive">Missing</Badge>}
-                </div>
-              )
-            })}
+          <div className="rounded-2xl border bg-muted/20 p-4">
+            <div className="mb-3 text-sm font-medium">Instances</div>
+            <div className="grid gap-2">
+              {connectedInstances.map((instance) => {
+                const monitor = record.monitorsByInstance[instance.config.id]
+                return (
+                  <div
+                    key={instance.config.id}
+                    className="flex items-center justify-between gap-3 rounded-lg bg-background/40 px-3 py-2 text-sm"
+                  >
+                    <span>{instance.config.name}</span>
+                    {monitor ? <Badge variant="secondary">{monitor.name}</Badge> : <Badge variant="destructive">Missing</Badge>}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </div>
-        <form className="grid gap-5" onSubmit={form.handleSubmit((values) => onSave(tag, values))}>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search settings…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
-          </div>
-          <Accordion type="multiple" value={accordionValues} onValueChange={setAccordionValues} className="grid gap-3">
-            {filteredGroups.map((group) => (
-              <AccordionItem key={group.label} value={group.label} className="rounded-2xl border bg-muted/20">
-                <AccordionTrigger>{group.label}</AccordionTrigger>
-                <AccordionContent>
-                  {group.actualFields.some((field) => typeof firstMonitor[field] === "boolean") ? (
-                    <div className="grid gap-3 md:grid-cols-2">{group.actualFields.map((field) => renderField(field))}</div>
-                  ) : (
-                    <div className="grid gap-4 md:grid-cols-2">{group.actualFields.map((field) => renderField(field))}</div>
-                  )}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-            {filteredUnlisted.length > 0 && (
-              <AccordionItem value="Unlisted settings" className="rounded-2xl border bg-muted/20">
-                <AccordionTrigger>Unlisted settings</AccordionTrigger>
-                <AccordionContent>
-                  <div className="grid gap-4 md:grid-cols-2">{filteredUnlisted.map((field) => renderField(field))}</div>
-                </AccordionContent>
-              </AccordionItem>
-            )}
-          </Accordion>
-          <div className="flex justify-end">
-            <Button type="submit">
-              <Save /> Save
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+          <form className="grid gap-5" onSubmit={form.handleSubmit((values) => onSave(tag, values))}>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search settings…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+            </div>
+            <Accordion type="multiple" value={accordionValues} onValueChange={setAccordionValues} className="grid gap-3">
+              {filteredGroups.map((group) => (
+                <AccordionItem key={group.label} value={group.label} className="rounded-2xl border bg-muted/20">
+                  <AccordionTrigger>{group.label}</AccordionTrigger>
+                  <AccordionContent>
+                    {group.actualFields.some((field) => typeof firstMonitor[field] === "boolean") ? (
+                      <div className="grid gap-3 md:grid-cols-2">{group.actualFields.map((field) => renderField(field))}</div>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2">{group.actualFields.map((field) => renderField(field))}</div>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+              {filteredUnlisted.length > 0 && (
+                <AccordionItem value="Unlisted settings" className="rounded-2xl border bg-muted/20">
+                  <AccordionTrigger>Unlisted settings</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="grid gap-4 md:grid-cols-2">{filteredUnlisted.map((field) => renderField(field))}</div>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
+            </Accordion>
+            <div className="flex justify-end">
+              <Button type="submit">
+                <Save /> Save
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

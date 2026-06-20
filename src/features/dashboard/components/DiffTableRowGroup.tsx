@@ -1,5 +1,5 @@
 import { Fragment } from "react"
-import { ArrowRight, CheckCircle2 } from "lucide-react"
+import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react"
 
 import { RouteLink } from "@/components/navigation/RouteLink"
 import { Badge } from "@/components/ui/badge"
@@ -53,35 +53,35 @@ export function DiffTableRowGroup({ groupName, records, connectedInstances, diff
               })}
               <TableCell>
                 {settingDiffs.length > 0 ? (
-                  <Button variant="destructive" className="h-auto px-2 py-1 text-xs" asChild>
-                    <RouteLink href={`/monitors/${encodeURIComponent(stripMonitorPrefix(record.tag))}`} onNavigate={onNavigate}>
-                      View diff
-                    </RouteLink>
-                  </Button>
+                  <Badge variant="destructive">
+                    <AlertCircle /> Out of sync
+                  </Badge>
                 ) : diff ? (
                   <Badge variant="destructive">{diff.description}</Badge>
                 ) : (
-                  <Badge variant="secondary">
+                  <Badge style={{ backgroundColor: "rgba(74, 222, 128, 0.15)", color: "#4ade80" }}>
                     <CheckCircle2 /> In sync
                   </Badge>
                 )}
               </TableCell>
               <TableCell className="text-right">
-                <div className="flex flex-wrap justify-end gap-2">
-                  {connectedInstances.map(
-                    (instance) =>
-                      record.monitorsByInstance[instance.config.id] && (
-                        <Button
-                          key={instance.config.id}
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onSyncFrom(instance.config.id, record.tag)}
-                        >
-                          Use {instance.config.name}
-                        </Button>
-                      ),
-                  )}
-                </div>
+                {(settingDiffs.length > 0 || diff) && (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {connectedInstances.map(
+                      (instance) =>
+                        record.monitorsByInstance[instance.config.id] && (
+                          <Button
+                            key={instance.config.id}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onSyncFrom(instance.config.id, record.tag)}
+                          >
+                            Use {instance.config.name}
+                          </Button>
+                        ),
+                    )}
+                  </div>
+                )}
               </TableCell>
             </TableRow>
             {settingDiffs.length > 0 && (

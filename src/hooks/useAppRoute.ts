@@ -12,6 +12,10 @@ export function useAppRoute() {
     return () => window.removeEventListener("popstate", onPopState)
   }, [])
 
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [route])
+
   function navigate(nextRoute: AppRoute) {
     const updateRoute = () => {
       window.history.pushState(null, "", nextRoute)
