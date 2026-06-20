@@ -44,7 +44,10 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
   const normalizedUrl = normalizeUrl(instance.url)
   const socket: Socket<KumaServerEvents, KumaClientEvents> = io(normalizedUrl, {
     autoConnect: false,
-    transports: ["websocket", "polling"],
+    transports: ["polling", "websocket"],
+    upgrade: true,
+    reconnection: false,
+    timeout: 15_000,
   })
 
   let monitorList: Record<string, KumaMonitor> = {}
@@ -92,10 +95,13 @@ function normalizeUrl(url: string): string {
 
 function connectSocket(socket: Socket<KumaServerEvents, KumaClientEvents>, url: string) {
   return new Promise<void>((resolve, reject) => {
+    let lastError: Error | null = null
+
     const timeout = window.setTimeout(() => {
       cleanup()
-      reject(new Error(`Timed out connecting to ${url}`))
-    }, 12_000)
+      const suffix = lastError ? ` Last error: ${lastError.message}` : ""
+      reject(new Error(`Timed out connecting to ${url}.${suffix}`))
+    }, 18_000)
 
     const cleanup = () => {
       window.clearTimeout(timeout)
@@ -109,8 +115,7 @@ function connectSocket(socket: Socket<KumaServerEvents, KumaClientEvents>, url: 
     }
 
     const onError = (error: Error) => {
-      cleanup()
-      reject(error)
+      lastError = error
     }
 
     socket.once("connect", onConnect)
