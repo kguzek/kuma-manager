@@ -21,7 +21,7 @@ export function DashboardPage({ connectedInstances, differences, monitorRecords,
       <section className="grid gap-4 md:grid-cols-3">
         <MetricCard title="Instances" value={connectedInstances.length} description="Authenticated Kuma servers" />
         <MetricCard title="Managed monitors" value={monitorRecords.length} description="Records with monitor:* tags" />
-        <MetricCard title="Diffs" value={differences.length} description="Missing or different configs" />
+        <MetricCard title="Diffs" value={differences.length} description="Missing or different configs" tone={differences.length === 0 ? "success" : "error"} />
       </section>
       <DiffTable connectedInstances={connectedInstances} differences={differences} monitorRecords={monitorRecords} monitorGroups={monitorGroups} onSyncFrom={onSyncFrom} onNavigate={onNavigate} />
       <UnmanagedMonitorsCard unmanagedMonitors={unmanagedMonitors} onApplySuggestedTag={onApplySuggestedTag} />
