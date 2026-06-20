@@ -24,6 +24,7 @@ import { buildStatusPageRecords, diffStatusPageRecord } from "@/features/status-
 import { clearTokens, loadInstances, loadTokens, saveInstances, saveTokens } from "@/utils/storage"
 import { resolveTokens, TEMPLATE_SUPPORTED_FIELDS } from "@/utils/template-tokens"
 import type { KumaApiClient } from "@/api/kuma/client"
+import { STATUS_PAGE_IGNORED_FIELDS } from "@/features/status-pages/utils/status-page-sync"
 import type {
   ConnectedKumaInstance,
   KumaInstanceConfig,
@@ -32,6 +33,7 @@ import type {
   LoginCredentials,
   MonitorDetailsValues,
   MonitorDifference,
+  PublicGroupMonitor,
   SessionState,
   StatusPageDetailsValues,
   StatusPageDifference,
@@ -46,7 +48,9 @@ export default function App() {
   const { route, navigate } = useAppRoute()
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [pendingCount, setPendingCount] = useState(0)
   const clientsRef = useRef<Record<string, KumaApiClient>>({})
+  const alertRef = useRef<HTMLDivElement>(null)
   const attemptedSavedLoginRef = useRef(false)
 
   const configuredInstances = useMemo(() => instances.filter((instance) => instance.url.trim()), [instances])
@@ -92,6 +96,12 @@ export default function App() {
     }
     return map
   }, [connectedInstances, monitorRecords])
+
+  useEffect(() => {
+    if (errorMessage && alertRef.current) {
+      alertRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }, [errorMessage])
 
   useEffect(() => {
     saveInstances(instances)
@@ -207,6 +217,7 @@ export default function App() {
   async function refreshMonitors() {
     setStatusMessage("Refreshing data...")
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     try {
       const refreshed = await Promise.all(
@@ -221,12 +232,15 @@ export default function App() {
       setStatusMessage("Data refreshed.")
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Refresh failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
   async function refreshStatusPages() {
     setStatusMessage("Refreshing status pages...")
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     try {
       const refreshed = await Promise.all(
@@ -241,6 +255,8 @@ export default function App() {
       setStatusMessage("Status pages refreshed.")
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Refresh failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
@@ -251,6 +267,7 @@ export default function App() {
 
     setStatusMessage(`Syncing ${tag} from ${instanceName(sourceInstanceId)}...`)
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     try {
       for (const targetInstance of connectedInstances) {
@@ -268,6 +285,8 @@ export default function App() {
       await refreshMonitors()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Sync failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
@@ -297,12 +316,15 @@ export default function App() {
     }
   }
 
+  const INSTANCE_LOCAL_FIELDS = new Set(["userID", "user_id", "proxy_id", "createdDate", "created_date", "modifiedDate", "modified_date"])
+
   async function saveMonitorDetails(tag: string, values: MonitorDetailsValues, groupName?: string) {
     const record = monitorRecords.find((entry) => entry.tag === tag)
     if (!record) return
 
     setStatusMessage(`Saving ${tag}...`)
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     const errors: string[] = []
 
@@ -311,7 +333,11 @@ export default function App() {
         const monitor = record.monitorsByInstance[instance.config.id]
         if (!monitor) continue
 
-        const instanceValues: Record<string, unknown> = { ...values }
+        const instanceValues: Record<string, unknown> = {}
+        for (const [key, val] of Object.entries(values)) {
+          if (INSTANCE_LOCAL_FIELDS.has(key)) continue
+          instanceValues[key] = val
+        }
         if (groupName !== undefined) {
           const group = monitorGroups.find((g) => g.instance.config.id === instance.config.id && g.group.name === groupName)
           instanceValues.parent = group?.group.id ?? null
@@ -346,6 +372,8 @@ export default function App() {
       setStatusMessage(`Saved ${tag} across all available instances.`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Save failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
@@ -355,6 +383,7 @@ export default function App() {
 
     setStatusMessage(`Renaming ${oldTag}...`)
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     try {
       for (const instance of connectedInstances) {
@@ -384,12 +413,15 @@ export default function App() {
       await refreshMonitors()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Tag rename failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
   async function createMonitor(tag: string, values: MonitorDetailsValues, groupName?: string) {
     setStatusMessage(`Creating ${tag} on all instances...`)
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     try {
       for (const instance of connectedInstances) {
@@ -414,6 +446,8 @@ export default function App() {
       setStatusMessage(`Created ${tag} successfully.`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Create failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
@@ -423,6 +457,7 @@ export default function App() {
 
     setStatusMessage(`Saving status page ${slug}...`)
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     const errors: string[] = []
 
@@ -460,12 +495,15 @@ export default function App() {
       setStatusMessage(`Saved status page ${slug} across all instances.`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Save failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
   async function createStatusPage(slug: string, values: StatusPageDetailsValues) {
     setStatusMessage(`Creating status page ${slug} on all instances...`)
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     try {
       for (const instance of connectedInstances) {
@@ -489,31 +527,35 @@ export default function App() {
       setStatusMessage(`Created status page ${slug} successfully.`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Create failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
-  async function fetchStatusPageDetail(slug: string, instanceId: string) {
+  async function enrichInstancePage(slug: string, instanceId: string) {
     const client = clientsRef.current[instanceId]
     if (!client) return null
     const detail = await client.getStatusPage(slug)
-    if (!detail) return null
-    setConnectedInstances((current) =>
-      current.map((instance) => {
-        if (instance.config.id !== instanceId) return instance
-        return {
-          ...instance,
-          statusPages: instance.statusPages?.map((page) => (page.slug === slug ? detail : page)),
-        }
-      }),
-    )
-    return detail
+    if (detail) {
+      setConnectedInstances((current) =>
+        current.map((instance) => {
+          if (instance.config.id !== instanceId) return instance
+          return {
+            ...instance,
+            statusPages: instance.statusPages?.map((page) => (page.slug === slug ? detail : page)),
+          }
+        }),
+      )
+      return detail
+    }
+    return null
   }
 
   async function addPublicGroupToInstance(slug: string, instanceId: string, pageId: number, name: string) {
     const client = clientsRef.current[instanceId]
     if (!client) return { ok: false, msg: "No client" }
     const result = await client.addPublicGroup(pageId, name)
-    if (result.ok) await fetchStatusPageDetail(slug, instanceId)
+    if (result.ok) await enrichInstancePage(slug, instanceId)
     return result
   }
 
@@ -521,7 +563,7 @@ export default function App() {
     const client = clientsRef.current[instanceId]
     if (!client) return { ok: false, msg: "No client" }
     const result = await client.renamePublicGroup(groupId, name)
-    if (result.ok) await fetchStatusPageDetail(slug, instanceId)
+    if (result.ok) await enrichInstancePage(slug, instanceId)
     return result
   }
 
@@ -529,21 +571,47 @@ export default function App() {
     const client = clientsRef.current[instanceId]
     if (!client) return { ok: false, msg: "No client" }
     const result = await client.deletePublicGroup(groupId)
-    if (result.ok) await fetchStatusPageDetail(slug, instanceId)
+    if (result.ok) await enrichInstancePage(slug, instanceId)
     return result
   }
 
-  async function setPublicGroupMonitorsOnInstance(
-    slug: string,
-    instanceId: string,
-    groupId: number,
-    monitorList: Array<{ id: number; name?: string; sendUrl?: boolean }>,
-  ) {
-    const client = clientsRef.current[instanceId]
-    if (!client) return { ok: false, msg: "No client" }
-    const result = await client.setPublicGroupMonitors(groupId, monitorList)
-    if (result.ok) await fetchStatusPageDetail(slug, instanceId)
-    return result
+  async function saveStatusPagePublicGroups(slug: string, groupId: number, monitorList: PublicGroupMonitor[]) {
+    const record = statusPageRecords.find((entry) => entry.slug === slug)
+    if (!record) return { ok: false, msg: "Status page record not found" }
+
+    const errors: string[] = []
+
+    for (const instance of connectedInstances) {
+      const page = record.pagesByInstance[instance.config.id]
+      if (!page) continue
+
+      const client = clientsRef.current[instance.config.id]
+      if (!client) continue
+
+      const config: Record<string, unknown> = {}
+      for (const [key, val] of Object.entries(page)) {
+        if (STATUS_PAGE_IGNORED_FIELDS.has(key)) continue
+        config[key] = val
+      }
+
+      const currentList = page.publicGroupList ?? []
+      const updatedList = currentList.map((group) => {
+        if (group.id !== groupId) return group
+        return { ...group, monitorList }
+      })
+
+      const result = await client.saveStatusPage({ slug, config, imgDataUrl: "", publicGroupList: updatedList })
+      if (!result.ok) {
+        errors.push(`${instance.config.name}: ${result.msg ?? "save failed"}`)
+      }
+    }
+
+    if (errors.length > 0) {
+      return { ok: false, msg: errors.join("; ") }
+    }
+
+    await refreshStatusPages()
+    return { ok: true }
   }
 
   async function deleteStatusPageFromAll(slug: string) {
@@ -552,6 +620,7 @@ export default function App() {
 
     setStatusMessage(`Deleting status page ${slug}...`)
     setErrorMessage(null)
+    setPendingCount((c) => c + 1)
 
     try {
       for (const instance of connectedInstances) {
@@ -567,6 +636,8 @@ export default function App() {
       setStatusMessage(`Deleted status page ${slug}.`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Delete failed")
+    } finally {
+      setPendingCount((c) => c - 1)
     }
   }
 
@@ -602,7 +673,7 @@ export default function App() {
       : isDetailPage
         ? "mx-auto w-full max-w-3xl"
         : "w-full"
-  const statusTone = sessionState === "authenticating" ? "loading" : "success"
+  const statusTone = sessionState === "authenticating" || pendingCount > 0 ? "loading" : "success"
 
   return (
     <main className="dot-grid-bg flex min-h-svh flex-col px-4 py-6 text-foreground sm:px-6 lg:px-10">
@@ -610,7 +681,7 @@ export default function App() {
         <AppHeader sessionState={sessionState} onLogout={logout} onRefresh={refreshMonitors} />
         <div className="flex flex-1 flex-col gap-6">
           {(statusMessage || errorMessage) && (
-            <div className={`${alertWidthClass} grid gap-3`}>
+            <div ref={alertRef} className={`${alertWidthClass} grid gap-3`}>
               {statusMessage && <StatusCard message={statusMessage} tone={statusTone} onDismiss={() => setStatusMessage(null)} />}
               {errorMessage && <StatusCard message={errorMessage} tone="error" onDismiss={() => setErrorMessage(null)} />}
             </div>
@@ -664,11 +735,10 @@ export default function App() {
               onNavigate={navigate}
               onSave={saveStatusPageDetails}
               onDelete={deleteStatusPageFromAll}
-              onFetchStatusPageDetail={fetchStatusPageDetail}
               onAddPublicGroup={addPublicGroupToInstance}
               onRenamePublicGroup={renamePublicGroupOnInstance}
               onDeletePublicGroup={deletePublicGroupFromInstance}
-              onSetPublicGroupMonitors={setPublicGroupMonitorsOnInstance}
+              onSaveStatusPagePublicGroups={saveStatusPagePublicGroups}
             />
           ) : route === "/status-pages" ? (
             <StatusPagesPage

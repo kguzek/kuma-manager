@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from "react"
-import { ArrowLeft, Braces, FileBarChart, Pencil, Plus, Save, Trash2, X } from "lucide-react"
+import {
+  DndContext,
+  type DragEndEvent,
+  type DragStartEvent,
+  DragOverlay,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core"
+import { SortableContext, useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { ArrowDownUp, ArrowLeft, Braces, FileBarChart, GripVertical, Pencil, Plus, Save, Trash2, X } from "lucide-react"
 import { useForm } from "react-hook-form"
 
 import { Badge } from "@/components/ui/badge"
@@ -11,7 +23,11 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { SettingsDiff } from "@/features/monitors/components/SettingsDiff"
-import { getStatusPageSettingDiffs, getStatusPageSettingFields } from "@/features/status-pages/utils/status-page-sync"
+import {
+  getStatusPageOrderingDiffs,
+  getStatusPageSettingDiffs,
+  getStatusPageSettingFields,
+} from "@/features/status-pages/utils/status-page-sync"
 import { getStatusPageFieldGroups, getStatusPageFieldLabel } from "@/features/status-pages/utils/status-page-settings"
 import { KNOWN_TEMPLATE_TOKENS, TEMPLATE_SUPPORTED_FIELDS } from "@/utils/template-tokens"
 import type {
@@ -23,6 +39,7 @@ import type {
   StatusPageDetailsValues,
   StatusPageSyncRecord,
 } from "@/types"
+import type { StatusPageOrderingDiff } from "@/features/status-pages/utils/status-page-sync"
 
 type StatusPageDetailPageProps = {
   route: AppRoute
@@ -32,16 +49,10 @@ type StatusPageDetailPageProps = {
   onNavigate: (route: AppRoute) => void
   onSave: (slug: string, values: StatusPageDetailsValues) => Promise<void>
   onDelete: (slug: string) => Promise<void>
-  onFetchStatusPageDetail: (slug: string, instanceId: string) => Promise<KumaStatusPage | null>
   onAddPublicGroup: (slug: string, instanceId: string, pageId: number, name: string) => Promise<KumaCommandResult>
   onRenamePublicGroup: (slug: string, instanceId: string, groupId: number, name: string) => Promise<KumaCommandResult>
   onDeletePublicGroup: (slug: string, instanceId: string, groupId: number) => Promise<KumaCommandResult>
-  onSetPublicGroupMonitors: (
-    slug: string,
-    instanceId: string,
-    groupId: number,
-    monitorList: Array<{ id: number; name?: string; sendUrl?: boolean }>,
-  ) => Promise<KumaCommandResult>
+  onSaveStatusPagePublicGroups: (slug: string, groupId: number, monitorList: PublicGroupMonitor[]) => Promise<KumaCommandResult>
 }
 
 export function StatusPageDetailPage({
@@ -52,11 +63,10 @@ export function StatusPageDetailPage({
   onNavigate,
   onSave,
   onDelete,
-  onFetchStatusPageDetail,
   onAddPublicGroup,
   onRenamePublicGroup,
   onDeletePublicGroup,
-  onSetPublicGroupMonitors,
+  onSaveStatusPagePublicGroups,
 }: StatusPageDetailPageProps) {
   const slug = route.startsWith("/status-pages/") ? decodeURIComponent(route.replace("/status-pages/", "")) : ""
   const record = statusPageRecords.find((entry) => entry.slug === slug)
@@ -73,19 +83,6 @@ export function StatusPageDetailPage({
   const defaultOpenLabels = groups.filter((g) => g.defaultOpen).map((g) => g.label)
   const [accordionValues, setAccordionValues] = useState<string[]>(defaultOpenLabels)
   const [autocompleteField, setAutocompleteField] = useState<string | null>(null)
-  const [fullPageData, setFullPageData] = useState<KumaStatusPage | null>(null)
-  const fetchDetailRef = useRef(onFetchStatusPageDetail)
-  fetchDetailRef.current = onFetchStatusPageDetail
-
-  useEffect(() => {
-    if (!record) return
-    const firstInstanceId = Object.keys(record.pagesByInstance)[0]
-    if (!firstInstanceId) return
-    setFullPageData(null)
-    fetchDetailRef.current(slug, firstInstanceId).then((data) => {
-      if (data) setFullPageData(data)
-    })
-  }, [slug, record])
 
   if (!record || !firstPage) {
     return (
@@ -107,7 +104,7 @@ export function StatusPageDetailPage({
     )
   }
 
-  const pageForGroups = fullPageData ?? firstPage
+  const pageForGroups = firstPage
 
   const settingDiffs = getStatusPageSettingDiffs(record, connectedInstances)
   const diffFieldSet = new Set(settingDiffs.map((d) => d.field))
@@ -378,7 +375,6 @@ export function StatusPageDetailPage({
                   <tbody>
                     {KNOWN_TEMPLATE_TOKENS.map((token) => {
                       const values = connectedInstances.map((inst) => token.resolve(inst.config.name, inst.config.url))
-                      const uniqueValues = new Set(values)
                       return (
                         <tr key={token.token} className="border-b last:border-b-0">
                           <td className="py-2 pr-4 font-mono" style={{ color: token.color }}>
@@ -386,7 +382,7 @@ export function StatusPageDetailPage({
                           </td>
                           {values.map((val, i) => (
                             <td key={connectedInstances[i].config.id} className="py-2 pr-4">
-                              <span className={uniqueValues.size > 1 ? "text-amber-400" : "text-emerald-400"}>{val}</span>
+                              <span style={{ color: token.color }}>{val}</span>
                             </td>
                           ))}
                         </tr>
@@ -465,7 +461,7 @@ export function StatusPageDetailPage({
         onAddPublicGroup={onAddPublicGroup}
         onRenamePublicGroup={onRenamePublicGroup}
         onDeletePublicGroup={onDeletePublicGroup}
-        onSetPublicGroupMonitors={onSetPublicGroupMonitors}
+        onSaveStatusPagePublicGroups={onSaveStatusPagePublicGroups}
       />
     </div>
   )
@@ -513,6 +509,33 @@ function IncidentsSection({
   )
 }
 
+function SortableMonitorBadge({ id, monitor, onRemove }: { id: string; monitor: PublicGroupMonitor; onRemove: (id: string) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    position: "relative" as const,
+    opacity: isDragging ? 0.3 : undefined,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 rounded-md border bg-muted/20 px-2 py-1.5 text-sm">
+      <button
+        type="button"
+        className="touch-none p-0.5 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="size-3.5" />
+      </button>
+      <span className="flex-1 truncate">{monitor.name}</span>
+      <button type="button" className="p-0.5 text-muted-foreground hover:text-destructive" onClick={() => onRemove(id)}>
+        <X className="size-3" />
+      </button>
+    </div>
+  )
+}
+
 function PublicGroupsSection({
   record,
   connectedInstances,
@@ -522,7 +545,7 @@ function PublicGroupsSection({
   onAddPublicGroup,
   onRenamePublicGroup,
   onDeletePublicGroup,
-  onSetPublicGroupMonitors,
+  onSaveStatusPagePublicGroups,
 }: {
   record: StatusPageSyncRecord
   connectedInstances: ConnectedKumaInstance[]
@@ -532,14 +555,20 @@ function PublicGroupsSection({
   onAddPublicGroup: (slug: string, instanceId: string, pageId: number, name: string) => Promise<KumaCommandResult>
   onRenamePublicGroup: (slug: string, instanceId: string, groupId: number, name: string) => Promise<KumaCommandResult>
   onDeletePublicGroup: (slug: string, instanceId: string, groupId: number) => Promise<KumaCommandResult>
-  onSetPublicGroupMonitors: (
-    slug: string,
-    instanceId: string,
-    groupId: number,
-    monitorList: Array<{ id: number; name?: string; sendUrl?: boolean }>,
-  ) => Promise<KumaCommandResult>
+  onSaveStatusPagePublicGroups: (slug: string, groupId: number, monitorList: PublicGroupMonitor[]) => Promise<KumaCommandResult>
 }) {
   const groups = pageForGroups?.publicGroupList ?? []
+  const [localMonitorLists, setLocalMonitorLists] = useState<Record<number, PublicGroupMonitor[]>>(() =>
+    Object.fromEntries(groups.map((g) => [g.id, [...(g.monitorList ?? [])]])),
+  )
+  useEffect(() => {
+    setLocalMonitorLists(Object.fromEntries(groups.map((g) => [g.id, [...(g.monitorList ?? [])]])))
+  }, [groups])
+
+  function getList(groupId: number) {
+    return localMonitorLists[groupId] ?? groups.find((g) => g.id === groupId)?.monitorList ?? []
+  }
+
   const firstInstanceId = Object.keys(record.pagesByInstance)[0]
   const firstInstance = connectedInstances.find((i) => i.config.id === firstInstanceId)
 
@@ -549,6 +578,28 @@ function PublicGroupsSection({
   const [renameValue, setRenameValue] = useState("")
   const [confirmDeleteGroupId, setConfirmDeleteGroupId] = useState<number | null>(null)
   const [addingMonitorGroupId, setAddingMonitorGroupId] = useState<number | null>(null)
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [monitorError, setMonitorError] = useState<string | null>(null)
+  const prevMonitorListsRef = useRef<Record<number, PublicGroupMonitor[]>>({})
+  const monitorErrorRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (monitorError && monitorErrorRef.current) {
+      monitorErrorRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    }
+  }, [monitorError])
+
+  function handleRemoveMonitor(sortableId: string) {
+    if (!firstInstanceId) return
+    const parts = sortableId.split("-")
+    if (parts.length < 2) return
+    const groupId = Number(parts[0])
+    const monitorId = Number(parts[1])
+    const list = getList(groupId)
+    const monitor = list.find((m) => m.id === monitorId)
+    if (!monitor) return
+    void handleToggleMonitor(groupId, list, monitor)
+  }
 
   async function handleAddGroup() {
     if (!newGroupName.trim() || !pageForGroups || !firstInstanceId) return
@@ -571,15 +622,79 @@ function PublicGroupsSection({
   }
 
   async function handleToggleMonitor(groupId: number, currentList: PublicGroupMonitor[], monitor: { id: number; name: string }) {
-    if (!firstInstanceId) return
     const alreadyInGroup = currentList.some((m) => m.id === monitor.id)
+    const existing = groups.find((g) => g.id === groupId)?.monitorList ?? []
+    const fullEntry = existing.find((m) => m.id === monitor.id)
     const newList = alreadyInGroup
       ? currentList.filter((m) => m.id !== monitor.id)
-      : [...currentList, { id: monitor.id, name: monitor.name, sendUrl: false }]
-    await onSetPublicGroupMonitors(slug, firstInstanceId, groupId, newList)
+      : [...currentList, fullEntry ?? { id: monitor.id, name: monitor.name, sendUrl: false }]
+    prevMonitorListsRef.current = localMonitorLists
+    setLocalMonitorLists((prev) => ({ ...prev, [groupId]: newList }))
+    setMonitorError(null)
+    const result = await onSaveStatusPagePublicGroups(slug, groupId, newList)
+    if (!result.ok) {
+      setLocalMonitorLists(prevMonitorListsRef.current)
+      setMonitorError(result.msg ?? "Failed to update monitor group")
+    }
+  }
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveDragId(String(event.active.id))
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setActiveDragId(null)
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const activeId = String(active.id)
+    const overId = String(over.id)
+    const parts = activeId.split("-")
+    const overParts = overId.split("-")
+    if (parts.length < 2 || overParts.length < 2) return
+    const groupId = Number(parts[0])
+    if (groupId !== Number(overParts[0])) return
+
+    const activeMonitorId = Number(parts[1])
+    const overMonitorId = Number(overParts[1])
+
+    const items = getList(groupId)
+    const oldIdx = items.findIndex((m) => m.id === activeMonitorId)
+    const newIdx = items.findIndex((m) => m.id === overMonitorId)
+    if (oldIdx === -1 || newIdx === -1) return
+
+    const reordered = [...items]
+    const [moved] = reordered.splice(oldIdx, 1)
+    reordered.splice(newIdx, 0, moved)
+
+    prevMonitorListsRef.current = localMonitorLists
+    setLocalMonitorLists((prev) => ({ ...prev, [groupId]: reordered }))
+    setMonitorError(null)
+    const result = await onSaveStatusPagePublicGroups(slug, groupId, reordered)
+    if (!result.ok) {
+      setLocalMonitorLists(prevMonitorListsRef.current)
+      setMonitorError(result.msg ?? "Failed to reorder monitors")
+    }
+  }
+
+  async function handleSortAlphabetically(groupId: number) {
+    const items = getList(groupId)
+    const sorted = [...items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
+    prevMonitorListsRef.current = localMonitorLists
+    setLocalMonitorLists((prev) => ({ ...prev, [groupId]: sorted }))
+    setMonitorError(null)
+    const result = await onSaveStatusPagePublicGroups(slug, groupId, sorted)
+    if (!result.ok) {
+      setLocalMonitorLists(prevMonitorListsRef.current)
+      setMonitorError(result.msg ?? "Failed to sort monitors")
+    }
   }
 
   const availableMonitors = firstInstance?.monitors ?? []
+
+  const orderingDiffs: StatusPageOrderingDiff[] = getStatusPageOrderingDiffs(record, connectedInstances)
 
   return (
     <Card className="mt-4">
@@ -595,6 +710,24 @@ function PublicGroupsSection({
         <CardDescription>Monitor groups displayed on the status page. Configure which monitors appear in each group.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
+        {monitorError && (
+          <div
+            ref={monitorErrorRef}
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            {monitorError}
+          </div>
+        )}
+        {orderingDiffs.length > 0 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <div className="mb-1 text-sm font-medium text-amber-400">Ordering diffs</div>
+            <div className="grid gap-1 text-xs text-amber-400/80">
+              {orderingDiffs.map((diff) => (
+                <p key={diff.description}>{diff.description}</p>
+              ))}
+            </div>
+          </div>
+        )}
         {addingGroup && (
           <div className="flex items-center gap-2 rounded-xl border bg-muted/20 p-3">
             <Input
@@ -644,8 +777,19 @@ function PublicGroupsSection({
                   <span className="font-medium">{group.name}</span>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-muted-foreground">
-                      {group.monitorList?.length ?? 0} monitor{(group.monitorList?.length ?? 0) !== 1 ? "s" : ""}
+                      {getList(group.id).length} monitor{getList(group.id).length !== 1 ? "s" : ""}
                     </span>
+                    {getList(group.id).length > 1 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-1.5"
+                        title="Sort alphabetically"
+                        onClick={() => handleSortAlphabetically(group.id)}
+                      >
+                        <ArrowDownUp className="size-3" />
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -680,34 +824,41 @@ function PublicGroupsSection({
                 </>
               )}
             </div>
-            {group.monitorList && group.monitorList.length > 0 && (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {group.monitorList.map((m) => (
-                  <Badge key={m.id} variant="secondary" className="flex items-center gap-1 text-xs">
-                    {m.name}
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={() => handleToggleMonitor(group.id, group.monitorList ?? [], m)}
-                    >
-                      <X className="size-2.5" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
+            {getList(group.id).length > 0 && (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <SortableContext items={getList(group.id).map((m) => `${group.id}-${m.id}`)}>
+                  <div className="mt-2 flex flex-col gap-1">
+                    {getList(group.id).map((m) => (
+                      <SortableMonitorBadge key={m.id} id={`${group.id}-${m.id}`} monitor={m} onRemove={handleRemoveMonitor} />
+                    ))}
+                  </div>
+                </SortableContext>
+                <DragOverlay>
+                  {activeDragId?.startsWith(`${group.id}-`) ? (
+                    <div className="flex items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-sm shadow-lg">
+                      <GripVertical className="size-3.5 text-muted-foreground" />
+                      {(() => {
+                        const mid = Number(activeDragId.split("-")[1])
+                        const m = getList(group.id).find((x) => x.id === mid)
+                        return <span className="flex-1 truncate">{m?.name ?? ""}</span>
+                      })()}
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             )}
             <div className="mt-2">
               {addingMonitorGroupId === group.id ? (
                 <div className="flex flex-wrap gap-1.5">
                   {availableMonitors
-                    .filter((m) => !group.monitorList?.some((gm) => gm.id === m.id))
+                    .filter((m) => !getList(group.id).some((gm) => gm.id === m.id))
                     .slice(0, 20)
                     .map((m) => (
                       <button
                         key={m.id}
                         type="button"
                         className="rounded-md border bg-background/40 px-2 py-0.5 text-xs transition-colors hover:bg-accent"
-                        onClick={() => handleToggleMonitor(group.id, group.monitorList ?? [], m)}
+                        onClick={() => handleToggleMonitor(group.id, getList(group.id), m)}
                       >
                         + {m.name}
                       </button>

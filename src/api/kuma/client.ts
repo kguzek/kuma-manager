@@ -9,6 +9,7 @@ import type {
   KumaStatusPage,
   KumaTagListResult,
   PublicGroup,
+  SaveStatusPageResult,
 } from "@/types"
 
 type KumaServerEvents = {
@@ -43,6 +44,10 @@ type KumaClientEvents = {
   getStatusPages: (callback: (response: unknown) => void) => void
   addStatusPage: (page: Partial<KumaStatusPage>, callback: (response: KumaCommandResult) => void) => void
   editStatusPage: (page: KumaStatusPage, callback: (response: KumaCommandResult) => void) => void
+  saveStatusPage: (
+    data: { slug: string; config: Record<string, unknown>; imgDataUrl: string; publicGroupList: PublicGroup[] },
+    callback: (response: SaveStatusPageResult) => void,
+  ) => void
   deleteStatusPage: (pageID: number, callback: (response: KumaCommandResult) => void) => void
   addIncident: (pageID: number, incident: Partial<KumaIncident>, callback: (response: KumaCommandResult) => void) => void
   editIncident: (incident: KumaIncident, callback: (response: KumaCommandResult) => void) => void
@@ -75,6 +80,12 @@ export type KumaApiClient = {
   getStatusPages: () => Promise<KumaStatusPage[]>
   addStatusPage: (page: Partial<KumaStatusPage>) => Promise<KumaCommandResult>
   editStatusPage: (page: KumaStatusPage) => Promise<KumaCommandResult>
+  saveStatusPage: (data: {
+    slug: string
+    config: Record<string, unknown>
+    imgDataUrl: string
+    publicGroupList: PublicGroup[]
+  }) => Promise<SaveStatusPageResult>
   deleteStatusPage: (pageID: number) => Promise<KumaCommandResult>
   addIncident: (pageID: number, incident: Partial<KumaIncident>) => Promise<KumaCommandResult>
   editIncident: (incident: KumaIncident) => Promise<KumaCommandResult>
@@ -212,6 +223,7 @@ export function createKumaApiClient(instance: KumaInstanceConfig): KumaApiClient
     },
     addStatusPage: (page) => emitWithCallback(socket, "addStatusPage", page),
     editStatusPage: (page) => emitWithCallback(socket, "editStatusPage", page),
+    saveStatusPage: (data) => emitWithCallback(socket, "saveStatusPage", data),
     deleteStatusPage: (pageID) => emitWithCallback(socket, "deleteStatusPage", pageID),
     addIncident: (pageID, incident) => emitWithCallback(socket, "addIncident", pageID, incident),
     editIncident: (incident) => emitWithCallback(socket, "editIncident", incident),
@@ -321,8 +333,12 @@ function waitForStatusPageList(socket: Socket<KumaServerEvents, KumaClientEvents
 function stripRuntimeMonitorFields(monitor: Partial<KumaMonitor>): Partial<KumaMonitor> {
   const copy = { ...monitor }
   delete copy.userID
+  delete copy.user_id
+  delete copy.proxy_id
   delete copy.createdDate
+  delete copy.created_date
   delete copy.modifiedDate
+  delete copy.modified_date
   delete copy.status
   delete copy.ping
   delete copy.certInfo

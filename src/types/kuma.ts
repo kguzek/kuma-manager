@@ -94,6 +94,12 @@ export type PublicGroupMonitor = {
   sendUrl: boolean
 }
 
+export type SaveStatusPageResult = {
+  ok: boolean
+  msg?: string
+  publicGroupList?: PublicGroup[]
+}
+
 export type KumaIncident = {
   id: number
   title: string

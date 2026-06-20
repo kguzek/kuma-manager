@@ -13,4 +13,4 @@ export type {
 } from "@/types/kuma"
 export type { MonitorDetailsValues, MonitorDifference, MonitorSyncRecord } from "@/types/monitor"
 export type { StatusPageSyncRecord, StatusPageDifference, StatusPageSettingDiff, StatusPageDetailsValues } from "@/types/monitor"
-export type { KumaStatusPage, PublicGroup, PublicGroupMonitor, KumaIncident } from "@/types/kuma"
+export type { KumaStatusPage, PublicGroup, PublicGroupMonitor, KumaIncident, SaveStatusPageResult } from "@/types/kuma"

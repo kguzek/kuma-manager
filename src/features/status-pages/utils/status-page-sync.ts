@@ -96,6 +96,54 @@ export function hasStatusPageSettingDiffs(record: StatusPageSyncRecord, instance
   return getStatusPageSettingDiffs(record, instances).length > 0
 }
 
+export type StatusPageOrderingDiff = {
+  type: "group_order" | "monitor_order"
+  groupName?: string
+  description: string
+}
+
+export function getStatusPageOrderingDiffs(record: StatusPageSyncRecord, instances: ConnectedKumaInstance[]): StatusPageOrderingDiff[] {
+  const present = instances.filter((instance) => record.pagesByInstance[instance.config.id])
+  if (present.length < 2) return []
+
+  const first = present[0]
+  const firstPage = record.pagesByInstance[first.config.id]
+  const firstGroups = firstPage?.publicGroupList ?? []
+
+  const diffs: StatusPageOrderingDiff[] = []
+
+  for (const instance of present.slice(1)) {
+    const page = record.pagesByInstance[instance.config.id]
+    const groups = page?.publicGroupList ?? []
+
+    const firstNameOrder = firstGroups.map((g) => g.name)
+    const thisNameOrder = groups.map((g) => g.name)
+    if (JSON.stringify(firstNameOrder) !== JSON.stringify(thisNameOrder)) {
+      diffs.push({
+        type: "group_order",
+        description: `Groups ordered differently on ${instance.config.name} vs ${first.config.name}: [${firstNameOrder.join(", ")}] vs [${thisNameOrder.join(", ")}]`,
+      })
+    }
+
+    for (const group of groups) {
+      const firstGroup = firstGroups.find((g) => g.name === group.name)
+      if (!firstGroup) continue
+
+      const firstMonitorOrder = (firstGroup.monitorList ?? []).map((m) => m.name)
+      const thisMonitorOrder = (group.monitorList ?? []).map((m) => m.name)
+      if (JSON.stringify(firstMonitorOrder) !== JSON.stringify(thisMonitorOrder)) {
+        diffs.push({
+          type: "monitor_order",
+          groupName: group.name,
+          description: `Monitors in "${group.name}" ordered differently on ${instance.config.name} vs ${first.config.name}`,
+        })
+      }
+    }
+  }
+
+  return diffs
+}
+
 function normalizeStatusPageForDiff(page: KumaStatusPage, instanceName: string, instanceUrl?: string) {
   const normalized: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(page)) {
