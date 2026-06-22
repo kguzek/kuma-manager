@@ -50,7 +50,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
     "husky": "^9.1.7",
-    "lint-staged": "^17.0.7",
+    "lint-staged": "^17.0.8",
     "prettier": "^3.8.4",
     "typescript": "^5.9.3",
     "vite": "^6.4.3"
