@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     open-pull-requests-limit: 15
 
     ignore:
@@ -16,5 +16,3 @@ updates:
         patterns:
           - "react"
           - "react-dom"
-          - "@types/react"
-          - "@types/react-dom"
